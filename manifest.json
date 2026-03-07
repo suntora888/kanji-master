@@ -1,0 +1,26 @@
+{
+  "name": "Kanji Master TH",
+  "short_name": "漢字Master",
+  "description": "JLPT N5+N4+N3 漢字学習アプリ（タイ語版）",
+  "start_url": "/kanji-th/",
+  "scope": "/kanji-th/",
+  "display": "standalone",
+  "background_color": "#0D0B09",
+  "theme_color": "#0D0B09",
+  "orientation": "portrait",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

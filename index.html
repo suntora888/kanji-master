@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanji Master TH</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0D0B09">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="漢字Master">
+  <link rel="apple-touch-icon" href="icon-512.svg">
+  <!-- Capacitor + AdMob: insert plugin scripts here when building for iOS/Android -->
+  <!-- <script src="capacitor.js"></script> -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/@capacitor-community/admob/dist/plugin.js"></script> -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: sans-serif; overflow-x: hidden; }
+    * { box-sizing: border-box; }
+    .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+    .animate-draw { stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: drawStroke 1s ease-out forwards; }
+    @keyframes drawStroke { 0% { stroke-dashoffset: 1000; } 100% { stroke-dashoffset: 0; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+  </style>
+</head>
+<body class="bg-[#0D0B09]">
+  <div id="root"></div>
+  <!-- AdMob banner placeholder (Capacitor build) -->
+  <!-- <div id="admob-banner" style="position:fixed;bottom:0;width:100%;z-index:999;"></div> -->
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // =====================================================================
+    // BUILTIN_KANJI_DB — v08: 311 kanji (N5: 125 / N4: 166 complete / N3: 20 starter)
+    // level:"N5"|"N4"|"N3" = JLPT level
+    // =====================================================================
+    const BUILTIN_KANJI_DB = [
+  // --- N5: Nature ---
+  {kanji:"水",reading:"スイ/みず",meaning:"Water (น้ำ)",tips:"สายน้ำไหล Flowing water shape",compounds:["水道 (すいどう - water supply/ประปา)", "水着 (みずぎ - swimsuit/ชุดว่ายน้ำ)", "水曜日 (すいようび - Wednesday/วันพุธ)", "洪水 (こうずい - flood/น้ำท่วม)"],tags:["water","น้ำ","nature"],level:"N5"},
+  {kanji:"火",reading:"カ/ひ",meaning:"Fire (ไฟ)",tips:"เปลวไฟลุกไหม้ Burning flame",compounds:["火事 (かじ - fire/ไฟไหม้)", "花火 (はなび - fireworks/ดอกไม้ไฟ)", "火曜日 (かようび - Tuesday/วันอังคาร)", "火山 (かざん - volcano/ภูเขาไฟ)"],tags:["fire","ไฟ","nature"],level:"N5"},
+  {kanji:"山",reading:"サン/やま",meaning:"Mountain (ภูเขา)",tips:"ยอดเขาสามยอด Three peaks",compounds:["富士山 (ふじさん - Mt.Fuji/ภูเขาฟูจิ)", "山道 (やまみち - mountain path/ทางเขา)", "火山 (かざん - volcano/ภูเขาไฟ)"],tags:["mountain","ภูเขา","nature"],level:"N5"},
+  {kanji:"川",reading:"セン/かわ",meaning:"River (แม่น้ำ)",tips:"เส้นสามเส้นไหลเหมือนน้ำ Three flowing lines",compounds:["河川 (かせん - rivers/แม่น้ำ)", "小川 (おがわ - stream/ลำธาร)"],tags:["river","แม่น้ำ","nature"],level:"N5"},
+  {kanji:"木",reading:"モク/き",meaning:"Tree (ต้นไม้)",tips:"ต้นไม้มีลำต้น กิ่ง ราก Trunk, branches, roots",compounds:["木曜日 (もくようび - Thursday/วันพฤหัส)", "木材 (もくざい - lumber/ไม้)", "大木 (たいぼく - large tree/ต้นไม้ใหญ่)"],tags:["tree","ต้นไม้","nature"],level:"N5"},
+  {kanji:"林",reading:"リン/はやし",meaning:"Grove (ป่าเล็ก)",tips:"木สองต้น = ป่า Two trees = grove",compounds:["林 (はやし - grove/ป่าเล็ก)", "林業 (りんぎょう - forestry/ป่าไม้)"],tags:["forest","ป่า","nature"],level:"N5"},
+  {kanji:"森",reading:"シン/もり",meaning:"Dense forest (ป่าทึบ)",tips:"木สามต้น = ป่าหนาแน่น Three trees = dense",compounds:["森林 (しんりん - forest/ป่าไม้)", "森 (もり - forest/ป่า)"],tags:["forest","ป่า","nature"],level:"N4"},
+  {kanji:"花",reading:"カ/はな",meaning:"Flower (ดอกไม้)",tips:"พืช(艹)+เปลี่ยน(化) Plant+change = flower",compounds:["花火 (はなび - fireworks/ดอกไม้ไฟ)", "花見 (はなみ - flower viewing/ชมดอกไม้)", "花瓶 (かびん - vase/แจกัน)"],tags:["flower","ดอกไม้","nature"],level:"N5"},
+  {kanji:"雨",reading:"ウ/あめ",meaning:"Rain (ฝน)",tips:"เมฆ+หยดน้ำฝน Cloud+raindrops",compounds:["大雨 (おおあめ - heavy rain/ฝนตกหนัก)", "雨季 (うき - rainy season/ฤดูฝน)", "梅雨 (つゆ - June rain/ฤดูฝน)"],tags:["rain","ฝน","weather","nature"],level:"N5"},
+  {kanji:"雪",reading:"セツ/ゆき",meaning:"Snow (หิมะ)",tips:"ฝนที่ตกช้า = หิมะ Slow rain = snow",compounds:["雪 (ゆき - snow/หิมะ)", "大雪 (おおゆき - heavy snow/หิมะตกหนัก)"],tags:["snow","หิมะ","weather"],level:"N5"},
+  {kanji:"風",reading:"フウ/かぜ",meaning:"Wind (ลม)",tips:"กรอบลมพัด+แมลง Wind frame+insect blown",compounds:["風 (かぜ - wind/ลม)", "台風 (たいふう - typhoon/ไต้ฝุ่น)", "風景 (ふうけい - scenery/ทิวทัศน์)"],tags:["wind","ลม","weather"],level:"N5"},
+  {kanji:"空",reading:"クウ/そら",meaning:"Sky, Empty (ท้องฟ้า, ว่าง)",tips:"穴+工 = ช่องว่าง → ท้องฟ้า Hole+work = sky",compounds:["空 (そら - sky/ท้องฟ้า)", "空気 (くうき - air/อากาศ)", "空港 (くうこう - airport/สนามบิน)"],tags:["sky","empty","ท้องฟ้า"],level:"N5"},
+  {kanji:"天",reading:"テン/あめ",meaning:"Heaven (สวรรค์)",tips:"คนกางแขน(大)+เส้นบน Person+line above = heaven",compounds:["天気 (てんき - weather/อากาศ)", "天国 (てんごく - heaven/สวรรค์)", "天才 (てんさい - genius/อัจฉริยะ)"],tags:["heaven","sky","สวรรค์"],level:"N5"},
+  {kanji:"海",reading:"カイ/うみ",meaning:"Sea (ทะเล)",tips:"น้ำ(氵)+ทุก(毎) = ทะเล Water+every = sea",compounds:["海 (うみ - sea/ทะเล)", "海外 (かいがい - overseas/ต่างประเทศ)", "海岸 (かいがん - coast/ชายฝั่ง)"],tags:["sea","ocean","ทะเล"],level:"N5"},
+  {kanji:"石",reading:"セキ/いし",meaning:"Stone (หิน)",tips:"หน้าผา+ก้อนหิน Cliff+rock",compounds:["石 (いし - stone/หิน)", "宝石 (ほうせき - jewel/อัญมณี)", "石油 (せきゆ - petroleum/น้ำมัน)"],tags:["stone","หิน","nature"],level:"N5"},
+  {kanji:"田",reading:"デン/た",meaning:"Rice field (นาข้าว)",tips:"นาแบ่ง4ส่วน Field in 4 sections",compounds:["田んぼ (たんぼ - rice paddy/นาข้าว)", "田中 (たなか - Tanaka)", "田舎 (いなか - countryside/ชนบท)"],tags:["field","rice","นา"],level:"N5"},
+  {kanji:"土",reading:"ド/つち",meaning:"Earth (ดิน)",tips:"พื้นดิน+ต้นอ่อน Ground+sprout",compounds:["土曜日 (どようび - Saturday/วันเสาร์)", "土地 (とち - land/ที่ดิน)"],tags:["earth","soil","ดิน"],level:"N5"},
+  {kanji:"池",reading:"チ/いけ",meaning:"Pond (สระน้ำ)",tips:"น้ำ(氵)+也 Water+also = pond",compounds:["池 (いけ - pond/สระน้ำ)", "電池 (でんち - battery/แบตเตอรี่)"],tags:["pond","สระน้ำ","water"],level:"N5"},
+  // --- N5: Time ---
+  {kanji:"日",reading:"ニチ/ひ,か",meaning:"Day, Sun (วัน, ดวงอาทิตย์)",tips:"สี่เหลี่ยม = ดวงอาทิตย์ Rectangle = sun",compounds:["日本 (にほん - Japan/ญี่ปุ่น)", "今日 (きょう - today/วันนี้)", "毎日 (まいにち - every day/ทุกวัน)", "日曜日 (にちようび - Sunday/วันอาทิตย์)"],tags:["day","sun","วัน","time"],level:"N5"},
+  {kanji:"月",reading:"ゲツ/つき",meaning:"Moon, Month (พระจันทร์, เดือน)",tips:"พระจันทร์เสี้ยว Crescent moon",compounds:["月曜日 (げつようび - Monday/วันจันทร์)", "正月 (しょうがつ - New Year/ปีใหม่)", "一月 (いちがつ - January/มกราคม)"],tags:["moon","month","เดือน","time"],level:"N5"},
+  {kanji:"年",reading:"ネン/とし",meaning:"Year (ปี)",tips:"คนทำนาปีละครั้ง Farming once = one year",compounds:["今年 (ことし - this year/ปีนี้)", "来年 (らいねん - next year/ปีหน้า)", "去年 (きょねん - last year/ปีก่อน)", "年齢 (ねんれい - age/อายุ)"],tags:["year","ปี","time"],level:"N5"},
+  {kanji:"時",reading:"ジ/とき",meaning:"Time (เวลา)",tips:"日+寺 = ระฆังวัดตี Sun+temple = bell rings",compounds:["時間 (じかん - time/เวลา)", "時計 (とけい - clock/นาฬิกา)", "何時 (なんじ - what time/กี่โมง)", "時々 (ときどき - sometimes/บางครั้ง)"],tags:["time","hour","เวลา"],level:"N5"},
+  {kanji:"分",reading:"フン/わ(かる)",meaning:"Minute, Understand (นาที, เข้าใจ)",tips:"มีด(刀)+ส่วน(八) = แบ่งออก Knife+part = divide/understand",compounds:["一分 (いっぷん - 1 minute/1 นาที)", "十分 (じゅっぷん - 10 minutes/10 นาที)", "自分 (じぶん - oneself/ตัวเอง)", "分かる (わかる - to understand/เข้าใจ)"],tags:["minute","understand","นาที","เข้าใจ","time"],level:"N5"},
+  {kanji:"半",reading:"ハン/なか(ば)",meaning:"Half (ครึ่ง)",tips:"ตัดครึ่ง Cut in half = half",compounds:["半分 (はんぶん - half/ครึ่ง)", "一時半 (いちじはん - 1:30/บ่ายโมงครึ่ง)", "半年 (はんとし - half year/ครึ่งปี)"],tags:["half","ครึ่ง","time"],level:"N5"},
+  {kanji:"間",reading:"カン/あいだ",meaning:"Between (ระหว่าง)",tips:"ประตู(門)+日 = แสงลอดช่อง Gate+sun = light through gap",compounds:["時間 (じかん - time/เวลา)", "人間 (にんげん - human/มนุษย์)", "間に合う (まにあう - to be in time/ทัน)"],tags:["between","ระหว่าง","time"],level:"N4"},
+  {kanji:"週",reading:"シュウ/-",meaning:"Week (สัปดาห์)",tips:"เดิน(辶)+รอบ(周) = 1สัปดาห์ Walk+circle = week",compounds:["今週 (こんしゅう - this week/สัปดาห์นี้)", "来週 (らいしゅう - next week/สัปดาห์หน้า)", "先週 (せんしゅう - last week/สัปดาห์ก่อน)"],tags:["week","สัปดาห์","time"],level:"N5"},
+  {kanji:"今",reading:"コン/いま",meaning:"Now (ตอนนี้)",tips:"ฝาครอบ+จุด = ช่วงเวลานี้ Cover+dot = this moment",compounds:["今日 (きょう - today/วันนี้)", "今週 (こんしゅう - this week)", "今年 (ことし - this year/ปีนี้)"],tags:["now","ตอนนี้","time"],level:"N5"},
+  {kanji:"午",reading:"ゴ/-",meaning:"Noon (เที่ยง)",tips:"ดวงอาทิตย์อยู่กลางฟ้า Sun at zenith = noon",compounds:["午前 (ごぜん - AM/ก่อนเที่ยง)", "午後 (ごご - PM/หลังเที่ยง)", "正午 (しょうご - noon/เที่ยง)"],tags:["noon","เที่ยง","time"],level:"N5"},
+  {kanji:"毎",reading:"マイ/-",meaning:"Every (ทุก)",tips:"母+斗 = ทุกวันดูแล Mother+measure = everyday care",compounds:["毎日 (まいにち - every day/ทุกวัน)", "毎週 (まいしゅう - every week/ทุกสัปดาห์)", "毎年 (まいとし - every year/ทุกปี)", "毎朝 (まいあさ - every morning/ทุกเช้า)"],tags:["every","ทุก","time"],level:"N5"},
+  {kanji:"前",reading:"ゼン/まえ",meaning:"Before, Front (ก่อน, ข้างหน้า)",tips:"เท้า+มีด = ตัดทางข้างหน้า Foot+knife = cut path forward",compounds:["午前 (ごぜん - morning/ก่อนเที่ยง)", "前 (まえ - before/ก่อน)", "名前 (なまえ - name/ชื่อ)"],tags:["before","front","ก่อน","time"],level:"N5"},
+  {kanji:"後",reading:"ゴ/あと",meaning:"After, Behind (หลัง)",tips:"เดินช้าตามหลัง Walking slowly behind",compounds:["午後 (ごご - afternoon/หลังเที่ยง)", "後 (あと - after/หลัง)", "最後 (さいご - last/สุดท้าย)"],tags:["after","behind","หลัง","time"],level:"N5"},
+  {kanji:"去",reading:"キョ/さ(る)",meaning:"Past, Leave (ที่ผ่านมา)",tips:"ดิน+ฝา = ออกไปจากที่นี่ Earth+cover = leave this place",compounds:["去年 (きょねん - last year/ปีก่อน)", "去る (さる - to leave/ออกไป)", "過去 (かこ - the past/อดีต)"],tags:["past","leave","ที่ผ่านมา","time"],level:"N5"},
+  {kanji:"曜",reading:"ヨウ/-",meaning:"Day of week (วันในสัปดาห์)",tips:"日+隹+羽 = นกบินในแสงตะวัน Bird flying in sunlight = day",compounds:["月曜日 (げつようび - Monday/วันจันทร์)", "火曜日 (かようび - Tuesday/วันอังคาร)", "何曜日 (なんようび - what day/วันอะไร)", "日曜日 (にちようび - Sunday/วันอาทิตย์)"],tags:["weekday","วัน","time"],level:"N5"},
+  {kanji:"朝",reading:"チョウ/あさ",meaning:"Morning (เช้า)",tips:"ดวงอาทิตย์+ดวงจันทร์ = เช้าตรู่ Sun+moon together = dawn",compounds:["朝 (あさ - morning/เช้า)", "朝ごはん (あさごはん - breakfast/อาหารเช้า)", "今朝 (けさ - this morning/เช้านี้)"],tags:["morning","เช้า","time","daily"],level:"N5"},
+  {kanji:"昼",reading:"チュウ/ひる",meaning:"Daytime, Noon (กลางวัน)",tips:"尺+旦 = แสงกลางวัน Ruler+dawn = daytime",compounds:["昼 (ひる - daytime/กลางวัน)", "昼ごはん (ひるごはん - lunch/อาหารกลางวัน)", "昼休み (ひるやすみ - lunch break/พักเที่ยง)"],tags:["daytime","noon","กลางวัน","time"],level:"N5"},
+  {kanji:"夜",reading:"ヤ/よる",meaning:"Night (กลางคืน)",tips:"หลังคา+คน+เย็น = คนอยู่บ้านยามค่ำ Roof+person+evening",compounds:["夜 (よる - night/กลางคืน)", "今夜 (こんや - tonight/คืนนี้)"],tags:["night","กลางคืน","time","daily"],level:"N5"},
+  // --- N5: People & Family ---
+  {kanji:"人",reading:"ジン/ひと",meaning:"Person (คน)",tips:"คนเดิน Person walking",compounds:["日本人 (にほんじん - Japanese/คนญี่ปุ่น)", "人口 (じんこう - population/ประชากร)", "大人 (おとな - adult/ผู้ใหญ่)", "人生 (じんせい - life/ชีวิต)"],tags:["person","people","คน"],level:"N5"},
+  {kanji:"生",reading:"セイ/い(きる)",meaning:"Life, Birth (ชีวิต, เกิด)",tips:"ต้นไม้งอก = เกิดใหม่ Plant sprouting = new life",compounds:["先生 (せんせい - teacher/ครู)", "学生 (がくせい - student/นักเรียน)", "生まれる (うまれる - to be born/เกิด)", "生活 (せいかつ - life/การดำรงชีวิต)"],tags:["life","birth","ชีวิต","เกิด"],level:"N5"},
+  {kanji:"長",reading:"チョウ/なが(い)",meaning:"Long, Chief (ยาว, หัวหน้า)",tips:"ผมยาว = ผู้อาวุโส Long hair = elder",compounds:["長い (ながい - long/ยาว)", "社長 (しゃちょう - president/ประธาน)"],tags:["long","chief","ยาว"],level:"N5"},
+  {kanji:"男",reading:"ダン/おとこ",meaning:"Man (ผู้ชาย)",tips:"นา(田)+พลัง(力) = ชายทำนา Field+power = man farming",compounds:["男の子 (おとこのこ - boy/เด็กชาย)", "男性 (だんせい - male/เพศชาย)"],tags:["man","male","ผู้ชาย"],level:"N5"},
+  {kanji:"女",reading:"ジョ/おんな",meaning:"Woman (ผู้หญิง)",tips:"ผู้หญิงนั่งคุกเข่า Woman kneeling gracefully",compounds:["女の子 (おんなのこ - girl/เด็กหญิง)", "女性 (じょせい - female/เพศหญิง)", "彼女 (かのじょ - she/เธอ)"],tags:["woman","female","ผู้หญิง"],level:"N5"},
+  {kanji:"子",reading:"シ/こ",meaning:"Child (เด็ก)",tips:"ทารกกางแขน Baby stretching arms",compounds:["子供 (こども - child/เด็ก)", "女子 (じょし - girl)", "男子 (だんし - boy)"],tags:["child","เด็ก","family"],level:"N5"},
+  {kanji:"父",reading:"フ/ちち",meaning:"Father (พ่อ)",tips:"มือถือขวาน = ผู้นำ Hand+axe = leader",compounds:["お父さん (おとうさん - father/พ่อ)", "父親 (ちちおや - father/พ่อ)", "祖父 (そふ - grandfather/ปู่)"],tags:["father","พ่อ","family"],level:"N5"},
+  {kanji:"母",reading:"ボ/はは",meaning:"Mother (แม่)",tips:"ผู้หญิงอุ้มลูก Woman holding child",compounds:["お母さん (おかあさん - mother/แม่)", "母国 (ぼこく - motherland/บ้านเกิด)", "母語 (ぼご - mother tongue/ภาษาแม่)"],tags:["mother","แม่","family"],level:"N5"},
+  {kanji:"兄",reading:"ケイ/あに",meaning:"Elder brother (พี่ชาย)",tips:"ปาก+ขา = คนสั่งสอนน้อง Mouth+legs = instructs younger",compounds:["お兄さん (おにいさん - elder brother/พี่ชาย)", "兄弟 (きょうだい - siblings/พี่น้อง)"],tags:["brother","พี่ชาย","family"],level:"N5"},
+  {kanji:"姉",reading:"シ/あね",meaning:"Elder sister (พี่สาว)",tips:"女+市 = ผู้หญิงดูแล Woman+market = managing",compounds:["お姉さん (おねえさん - elder sister/พี่สาว)", "姉妹 (しまい - sisters/พี่น้องสาว)"],tags:["sister","พี่สาว","family"],level:"N5"},
+  {kanji:"弟",reading:"テイ/おとうと",meaning:"Younger brother (น้องชาย)",tips:"ด้ายพันรอบ = เรียงลำดับน้อง Thread wound = in order",compounds:["弟 (おとうと - younger brother/น้องชาย)", "兄弟 (きょうだい - siblings/พี่น้อง)"],tags:["brother","น้องชาย","family"],level:"N5"},
+  {kanji:"妹",reading:"マイ/いもうと",meaning:"Younger sister (น้องสาว)",tips:"女+未(ยังไม่) = ผู้หญิงยังเล็ก Woman+not yet = still young",compounds:["妹 (いもうと - younger sister/น้องสาว)", "姉妹 (しまい - sisters/พี่น้องสาว)"],tags:["sister","น้องสาว","family"],level:"N5"},
+  {kanji:"友",reading:"ユウ/とも",meaning:"Friend (เพื่อน)",tips:"มือสองมือจับกัน Two hands clasping = friendship",compounds:["友達 (ともだち - friend/เพื่อน)", "親友 (しんゆう - best friend/เพื่อนสนิท)"],tags:["friend","เพื่อน","people"],level:"N5"},
+  {kanji:"先",reading:"セン/さき",meaning:"Previous, Ahead (ก่อน)",tips:"เท้า+ขา = ก้าวไปข้างหน้า Foot+legs = step forward",compounds:["先生 (せんせい - teacher/ครู)", "先週 (せんしゅう - last week/สัปดาห์ก่อน)"],tags:["previous","ahead","ก่อน","teacher","ครู"],level:"N5"},
+  {kanji:"名",reading:"メイ/な",meaning:"Name (ชื่อ)",tips:"เย็น(夕)+ปาก(口) = เรียกชื่อในความมืด Evening+mouth = calling names",compounds:["名前 (なまえ - name/ชื่อ)", "有名 (ゆうめい - famous/มีชื่อเสียง)"],tags:["name","ชื่อ"],level:"N5"},
+  {kanji:"私",reading:"シ/わたし",meaning:"I (ฉัน)",tips:"ข้าว+ส่วนตัว = ของฉัน Rice+private = mine = I",compounds:["私 (わたし - I/ฉัน)", "私立 (しりつ - private/เอกชน)"],tags:["I","me","ฉัน"],level:"N5"},
+  {kanji:"自",reading:"ジ/みずか(ら)",meaning:"Self (ตัวเอง)",tips:"จมูกชี้ตัวเอง Nose pointing at self",compounds:["自分 (じぶん - oneself/ตัวเอง)", "自動車 (じどうしゃ - car/รถยนต์)", "自然 (しぜん - nature/ธรรมชาติ)"],tags:["self","ตัวเอง"],level:"N5"},
+  {kanji:"何",reading:"カ/なに",meaning:"What (อะไร)",tips:"คน+ได้ = ถามอะไร Person+can = asking what",compounds:["何 (なに - what/อะไร)", "何時 (なんじ - what time/กี่โมง)", "何人 (なんにん - how many people/กี่คน)"],tags:["what","อะไร","question"],level:"N5"},
+  // --- N5: Body ---
+  {kanji:"目",reading:"モク/め",meaning:"Eye (ตา)",tips:"ดวงตาตั้งขึ้น Eye turned upright",compounds:["目 (め - eye/ตา)", "目的 (もくてき - purpose/จุดประสงค์)", "目標 (もくひょう - goal/เป้าหมาย)"],tags:["eye","ตา","body"],level:"N5"},
+  {kanji:"口",reading:"コウ/くち",meaning:"Mouth (ปาก)",tips:"ปากเปิดอ้า Open mouth",compounds:["入口 (いりぐち - entrance/ทางเข้า)", "出口 (でぐち - exit/ทางออก)", "人口 (じんこう - population/ประชากร)"],tags:["mouth","ปาก","body"],level:"N5"},
+  {kanji:"耳",reading:"ジ/みみ",meaning:"Ear (หู)",tips:"รูปหู Ear shape",compounds:["耳 (みみ - ear/หู)", "耳鼻科 (じびか - ENT clinic)"],tags:["ear","หู","body"],level:"N5"},
+  {kanji:"手",reading:"シュ/て",meaning:"Hand (มือ)",tips:"รูปมือมีนิ้ว Hand with fingers",compounds:["手紙 (てがみ - letter/จดหมาย)", "上手 (じょうず - skilled/เก่ง)", "手伝う (てつだう - to help/ช่วย)", "選手 (せんしゅ - player/นักกีฬา)"],tags:["hand","มือ","body"],level:"N5"},
+  {kanji:"足",reading:"ソク/あし",meaning:"Foot, Enough (เท้า, พอ)",tips:"หัวเข่า+หยุด = ขายืน Knee+stop = leg standing",compounds:["足 (あし - foot/เท้า)", "足りる (たりる - enough/พอ)", "遠足 (えんそく - excursion/ทัศนศึกษา)"],tags:["foot","leg","เท้า","body"],level:"N5"},
+  {kanji:"心",reading:"シン/こころ",meaning:"Heart, Mind (หัวใจ, จิตใจ)",tips:"รูปหัวใจ Heart shape with 3 chambers",compounds:["安心 (あんしん - peace of mind/สบายใจ)", "心配 (しんぱい - worry/กังวล)", "中心 (ちゅうしん - center/ศูนย์กลาง)"],tags:["heart","mind","หัวใจ","จิตใจ"],level:"N5"},
+  {kanji:"力",reading:"リョク/ちから",meaning:"Power (พลัง)",tips:"แขนเกร็งกล้ามเนื้อ Flexed arm muscle",compounds:["力 (ちから - power/พลัง)", "努力 (どりょく - effort/ความพยายาม)", "能力 (のうりょく - ability/ความสามารถ)"],tags:["power","strength","พลัง"],level:"N5"},
+  {kanji:"体",reading:"タイ/からだ",meaning:"Body (ร่างกาย)",tips:"人+本 = พื้นฐานของคน Person+origin = body",compounds:["体 (からだ - body/ร่างกาย)", "体育 (たいいく - P.E./พลศึกษา)", "体験 (たいけん - experience/ประสบการณ์)"],tags:["body","ร่างกาย"],level:"N5"},
+  // --- N5: Size & Adjectives ---
+  {kanji:"大",reading:"ダイ/おお(きい)",meaning:"Big (ใหญ่)",tips:"คนกางแขนกว้าง = ใหญ่! Person arms wide = big!",compounds:["大学 (だいがく - university/มหาวิทยาลัย)", "大きい (おおきい - big/ใหญ่)", "大人 (おとな - adult/ผู้ใหญ่)", "大切 (たいせつ - important/สำคัญ)"],tags:["big","large","ใหญ่","size"],level:"N5"},
+  {kanji:"小",reading:"ショウ/ちい(さい)",meaning:"Small (เล็ก)",tips:"เส้นแบ่งเล็กๆ Split into small pieces",compounds:["小学校 (しょうがっこう - elementary school/ประถม)", "小さい (ちいさい - small/เล็ก)", "小説 (しょうせつ - novel/นิยาย)"],tags:["small","little","เล็ก","size"],level:"N5"},
+  {kanji:"中",reading:"チュウ/なか",meaning:"Middle (กลาง)",tips:"เส้นผ่านกลาง Line through center",compounds:["中国 (ちゅうごく - China/จีน)", "中学校 (ちゅうがっこう - middle school/มัธยมต้น)", "中心 (ちゅうしん - center/ศูนย์กลาง)"],tags:["middle","inside","กลาง"],level:"N5"},
+  {kanji:"高",reading:"コウ/たか(い)",meaning:"High, Expensive (สูง, แพง)",tips:"หอคอยสูง Tall tower",compounds:["高い (たかい - expensive/แพง)", "高校 (こうこう - high school/มัธยมปลาย)", "最高 (さいこう - the best/ดีที่สุด)"],tags:["high","expensive","สูง","แพง"],level:"N5"},
+  {kanji:"安",reading:"アン/やす(い)",meaning:"Cheap, Peace (ถูก, สงบ)",tips:"หลังคา+ผู้หญิง = สงบ Roof+woman = peaceful",compounds:["安い (やすい - cheap/ถูก)", "安心 (あんしん - peace of mind/สบายใจ)", "安全 (あんぜん - safe/ปลอดภัย)"],tags:["cheap","peace","ถูก","safe"],level:"N5"},
+  {kanji:"多",reading:"タ/おお(い)",meaning:"Many (มาก)",tips:"夕สองตัว = เยอะ Two evenings = many",compounds:["多い (おおい - many/มาก)", "多分 (たぶん - probably/อาจจะ)"],tags:["many","much","มาก"],level:"N5"},
+  {kanji:"少",reading:"ショウ/すく(ない)",meaning:"Few (น้อย)",tips:"เล็ก+ตัด = น้อย Small+cut = few",compounds:["少し (すこし - a little/นิดหน่อย)", "少ない (すくない - few/น้อย)", "少年 (しょうねん - boy/เด็กชาย)"],tags:["few","little","น้อย"],level:"N5"},
+  {kanji:"古",reading:"コ/ふる(い)",meaning:"Old (เก่า)",tips:"กล่อง+十 = ผ่านมานาน Box+ten = long ago",compounds:["古い (ふるい - old/เก่า)", "中古 (ちゅうこ - secondhand/มือสอง)"],tags:["old","เก่า"],level:"N5"},
+  {kanji:"新",reading:"シン/あたら(しい)",meaning:"New (ใหม่)",tips:"ต้นไม้+ขวาน = เริ่มใหม่ Tree+axe = fresh start",compounds:["新しい (あたらしい - new/ใหม่)", "新聞 (しんぶん - newspaper/หนังสือพิมพ์)", "新年 (しんねん - new year/ปีใหม่)"],tags:["new","ใหม่"],level:"N5"},
+  {kanji:"強",reading:"キョウ/つよ(い)",meaning:"Strong (แข็งแรง)",tips:"ธนู+แมลง = แข็งแกร่ง Bow+insect = strong",compounds:["強い (つよい - strong/แข็งแรง)", "勉強 (べんきょう - study/เรียน)"],tags:["strong","แข็งแรง"],level:"N5"},
+  {kanji:"好",reading:"コウ/す(き)",meaning:"Like (ชอบ)",tips:"ผู้หญิง+เด็ก = แม่รักลูก Woman+child = mother loves",compounds:["好き (すき - like/ชอบ)", "大好き (だいすき - love/ชอบมาก)"],tags:["like","love","ชอบ"],level:"N5"},
+  {kanji:"楽",reading:"ガク/たの(しい)",meaning:"Fun, Music (สนุก, ดนตรี)",tips:"ขาว+ไม้ = กลอง = ดนตรี White+wood = drum = music",compounds:["楽しい (たのしい - fun/สนุก)", "音楽 (おんがく - music/ดนตรี)"],tags:["fun","music","สนุก","ดนตรี"],level:"N5"},
+  // --- N5: Numbers ---
+  {kanji:"一",reading:"イチ/ひと(つ)",meaning:"One (หนึ่ง)",tips:"เส้นเดียว Single line",compounds:["一つ (ひとつ - one/หนึ่ง)", "一月 (いちがつ - January)", "一番 (いちばん - #1/อันดับหนึ่ง)"],tags:["one","หนึ่ง","number"],level:"N5"},
+  {kanji:"二",reading:"ニ/ふた(つ)",meaning:"Two (สอง)",tips:"สองเส้น Two lines",compounds:["二つ (ふたつ - two/สอง)", "二月 (にがつ - February)", "二人 (ふたり - two people/สองคน)"],tags:["two","สอง","number"],level:"N5"},
+  {kanji:"三",reading:"サン/み(つ)",meaning:"Three (สาม)",tips:"สามเส้น Three lines",compounds:["三つ (みっつ - three/สาม)", "三月 (さんがつ - March)"],tags:["three","สาม","number"],level:"N5"},
+  {kanji:"四",reading:"シ/よ(つ)",meaning:"Four (สี่)",tips:"สี่มุมกรอบ = หน้าต่างสี่ช่อง Four-window frame",compounds:["四つ (よっつ - four/สี่)", "四月 (しがつ - April/เมษายน)", "四人 (よにん - four people/สี่คน)", "四角 (しかく - square/สี่เหลี่ยม)"],tags:["four","สี่","number"],level:"N5"},
+  {kanji:"五",reading:"ゴ/いつ(つ)",meaning:"Five (ห้า)",tips:"ห้านิ้วมือ Five fingers",compounds:["五つ (いつつ - five/ห้า)", "五月 (ごがつ - May/พฤษภาคม)", "五人 (ごにん - five people/ห้าคน)"],tags:["five","ห้า","number"],level:"N5"},
+  {kanji:"六",reading:"ロク/む(つ)",meaning:"Six (หก)",tips:"หกด้านของลูกเต๋า Six faces of a die",compounds:["六つ (むっつ - six/หก)", "六月 (ろくがつ - June/มิถุนายน)", "六人 (ろくにん - six people/หกคน)"],tags:["six","หก","number"],level:"N5"},
+  {kanji:"七",reading:"シチ/なな(つ)",meaning:"Seven (เจ็ด)",tips:"เส้นขีดเจ็ด = นับ Strokes = counting",compounds:["七つ (ななつ - seven/เจ็ด)", "七月 (しちがつ - July/กรกฎาคม)", "七五三 (しちごさん - festival/เทศกาล)"],tags:["seven","เจ็ด","number"],level:"N5"},
+  {kanji:"八",reading:"ハチ/や(つ)",meaning:"Eight (แปด)",tips:"แปดกางออก = สัญลักษณ์โชค Eight spreading = lucky sign",compounds:["八つ (やっつ - eight/แปด)", "八月 (はちがつ - August/สิงหาคม)", "八百屋 (やおや - greengrocer/ร้านผัก)"],tags:["eight","แปด","number"],level:"N5"},
+  {kanji:"九",reading:"キュウ/ここの(つ)",meaning:"Nine (เก้า)",tips:"เก้าโค้ง = เกือบครบ Nine curved = almost complete",compounds:["九つ (ここのつ - nine/เก้า)", "九月 (くがつ - September/กันยายน)", "九時 (くじ - 9 o'clock/9 โมง)"],tags:["nine","เก้า","number"],level:"N5"},
+  {kanji:"十",reading:"ジュウ/とお",meaning:"Ten (สิบ)",tips:"เส้นไขว้ = สมบูรณ์ Cross = complete ten",compounds:["十 (じゅう - ten/สิบ)", "十月 (じゅうがつ - October/ตุลาคม)", "二十 (にじゅう - twenty/ยี่สิบ)", "十分 (じゅうぶん - enough/เพียงพอ)"],tags:["ten","สิบ","number"],level:"N5"},
+  {kanji:"百",reading:"ヒャク/-",meaning:"Hundred (ร้อย)",tips:"一+白 = จำนวนบริสุทธิ์ One+white = pure number",compounds:["百 (ひゃく - hundred/ร้อย)", "百円 (ひゃくえん - 100yen)"],tags:["hundred","ร้อย","number"],level:"N5"},
+  {kanji:"千",reading:"セン/ち",meaning:"Thousand (พัน)",tips:"人+十 = คนมาก Person+ten = many",compounds:["千 (せん - thousand/พัน)", "千円 (せんえん - 1000yen)"],tags:["thousand","พัน","number"],level:"N5"},
+  {kanji:"万",reading:"マン/-",meaning:"Ten thousand (หมื่น)",tips:"จำนวนมหาศาล Vast number",compounds:["一万 (いちまん - 10,000/หนึ่งหมื่น)", "万年筆 (まんねんひつ - fountain pen/ปากกาหมึก)"],tags:["ten thousand","หมื่น","number"],level:"N5"},
+  {kanji:"円",reading:"エン/まる",meaning:"Yen, Circle (เยน)",tips:"วงกลม = สกุลเงินญี่ปุ่น Circle = Japanese currency",compounds:["百円 (ひゃくえん - 100yen)", "円 (えん - yen/เยน)"],tags:["yen","circle","เยน","money"],level:"N5"},
+  // --- N5: Actions / Verbs ---
+  {kanji:"食",reading:"ショク/た(べる)",meaning:"Eat (กิน)",tips:"ฝาหม้อ+ชามข้าว+ช้อน Pot lid+rice bowl+spoon",compounds:["食べる (たべる - to eat/กิน)", "食事 (しょくじ - meal/มื้ออาหาร)", "和食 (わしょく - Japanese food/อาหารญี่ปุ่น)", "食品 (しょくひん - food product/อาหาร)"],tags:["eat","food","กิน","อาหาร"],level:"N5"},
+  {kanji:"飲",reading:"イン/の(む)",meaning:"Drink (ดื่ม)",tips:"อาหาร(食)+อ้าปาก(欠) = ดื่ม Food+open mouth = drink",compounds:["飲む (のむ - to drink/ดื่ม)", "飲料 (いんりょう - beverage/เครื่องดื่ม)"],tags:["drink","ดื่ม","food"],level:"N5"},
+  {kanji:"見",reading:"ケン/み(る)",meaning:"See (ดู)",tips:"ตา(目)+ขา(儿) = เดินไปดู Eye+legs = walk to see",compounds:["見る (みる - to see/ดู)", "花見 (はなみ - flower viewing/ชมดอกไม้)", "意見 (いけん - opinion/ความเห็น)"],tags:["see","look","ดู","มอง"],level:"N5"},
+  {kanji:"聞",reading:"ブン/き(く)",meaning:"Hear, Listen (ฟัง)",tips:"ประตู(門)+หู(耳) = แนบหูฟัง Gate+ear = listen at gate",compounds:["聞く (きく - to listen/ฟัง)", "新聞 (しんぶん - newspaper/หนังสือพิมพ์)"],tags:["hear","listen","ฟัง"],level:"N5"},
+  {kanji:"読",reading:"ドク/よ(む)",meaning:"Read (อ่าน)",tips:"คำพูด(言)+ขาย(売) = อ่าน Words+sell = read",compounds:["読む (よむ - to read/อ่าน)", "読書 (どくしょ - reading/การอ่าน)"],tags:["read","อ่าน","study"],level:"N5"},
+  {kanji:"書",reading:"ショ/か(く)",meaning:"Write (เขียน)",tips:"พู่กัน+日 = เขียนทุกวัน Brush+day = write daily",compounds:["書く (かく - to write/เขียน)", "辞書 (じしょ - dictionary/พจนานุกรม)", "図書館 (としょかん - library/ห้องสมุด)"],tags:["write","เขียน","study"],level:"N5"},
+  {kanji:"話",reading:"ワ/はな(す)",meaning:"Talk (พูด)",tips:"คำพูด(言)+ลิ้น(舌) = พูด Speech+tongue = talk",compounds:["電話 (でんわ - telephone/โทรศัพท์)", "会話 (かいわ - conversation/การสนทนา)", "話す (はなす - to speak/พูด)"],tags:["talk","speak","พูด"],level:"N5"},
+  {kanji:"言",reading:"ゲン/い(う)",meaning:"Say, Word (พูด, คำ)",tips:"ปาก+คลื่นเสียง Mouth+sound waves = words",compounds:["言う (いう - to say/พูด)", "言葉 (ことば - word/คำ)", "言語 (げんご - language/ภาษา)"],tags:["say","word","พูด","คำ"],level:"N5"},
+  {kanji:"行",reading:"コウ/い(く)",meaning:"Go (ไป)",tips:"สี่แยกถนน Crossroads = travel",compounds:["行く (いく - to go/ไป)", "旅行 (りょこう - travel/การเดินทาง)", "銀行 (ぎんこう - bank/ธนาคาร)"],tags:["go","travel","ไป"],level:"N5"},
+  {kanji:"来",reading:"ライ/く(る)",meaning:"Come (มา)",tips:"ข้าวสาลีมาถึง Wheat arriving = coming",compounds:["来る (くる - to come/มา)", "来週 (らいしゅう - next week)", "来年 (らいねん - next year)", "未来 (みらい - future/อนาคต)"],tags:["come","มา"],level:"N5"},
+  {kanji:"出",reading:"シュツ/で(る)",meaning:"Go out (ออก)",tips:"ภูเขาโผล่ Mountain popping out",compounds:["出る (でる - to exit/ออก)", "出口 (でぐち - exit/ทางออก)", "出発 (しゅっぱつ - departure/ออกเดินทาง)"],tags:["out","exit","ออก"],level:"N5"},
+  {kanji:"入",reading:"ニュウ/はい(る)",meaning:"Enter (เข้า)",tips:"ลูกศรชี้เข้า Arrow inward",compounds:["入る (はいる - to enter/เข้า)", "入口 (いりぐち - entrance/ทางเข้า)", "入学 (にゅうがく - enrollment/เข้าเรียน)"],tags:["enter","เข้า"],level:"N5"},
+  {kanji:"休",reading:"キュウ/やす(む)",meaning:"Rest (พักผ่อน)",tips:"คน+ต้นไม้ = พิงต้นไม้พัก Person+tree = resting against tree",compounds:["休む (やすむ - to rest/พักผ่อน)", "休日 (きゅうじつ - holiday/วันหยุด)"],tags:["rest","พักผ่อน","daily"],level:"N5"},
+  {kanji:"買",reading:"バイ/か(う)",meaning:"Buy (ซื้อ)",tips:"ตะกร้า+เปลือกหอย(เงิน) Basket+shell(money) = buy",compounds:["買う (かう - to buy/ซื้อ)", "買い物 (かいもの - shopping/ช้อปปิ้ง)"],tags:["buy","ซื้อ","shopping"],level:"N5"},
+  // --- N5: Education & Places ---
+  {kanji:"教",reading:"キョウ/おし(える)",meaning:"Teach (สอน)",tips:"ความกตัญญู+ตี = สอน Filial piety+strike = teach",compounds:["教える (おしえる - to teach/สอน)", "教室 (きょうしつ - classroom/ห้องเรียน)", "教科書 (きょうかしょ - textbook/ตำรา)"],tags:["teach","สอน","education"],level:"N5"},
+  {kanji:"学",reading:"ガク/まな(ぶ)",meaning:"Study (เรียน)",tips:"มือเด็กจับดินสอ+เด็ก Child's hand+child = learning",compounds:["学校 (がっこう - school/โรงเรียน)", "学生 (がくせい - student/นักเรียน)", "大学 (だいがく - university/มหาวิทยาลัย)"],tags:["study","learn","เรียน","school"],level:"N5"},
+  {kanji:"校",reading:"コウ/-",meaning:"School (โรงเรียน)",tips:"木+交 = สถานที่คนมาพบกัน Wood+meet = meeting place",compounds:["学校 (がっこう - school/โรงเรียน)", "高校 (こうこう - high school/มัธยมปลาย)"],tags:["school","โรงเรียน"],level:"N5"},
+  {kanji:"国",reading:"コク/くに",meaning:"Country (ประเทศ)",tips:"กรอบ(囗)+สมบัติ(玉) = ปกป้องสมบัติ Border+treasure = protect",compounds:["外国 (がいこく - foreign country/ต่างประเทศ)", "中国 (ちゅうごく - China/จีน)", "国際 (こくさい - international/ระหว่างประเทศ)"],tags:["country","nation","ประเทศ"],level:"N5"},
+  {kanji:"店",reading:"テン/みせ",meaning:"Store (ร้าน)",tips:"หลังคา+ยึด = ยึดพื้นที่ขาย Roof+occupy = occupy to sell",compounds:["店 (みせ - shop/ร้าน)", "店員 (てんいん - clerk/พนักงาน)"],tags:["store","shop","ร้าน"],level:"N5"},
+  {kanji:"駅",reading:"エキ/-",meaning:"Station (สถานี)",tips:"ม้า+ระยะทาง = ที่พัก Horse+distance = rest stop",compounds:["駅 (えき - station/สถานี)", "駅前 (えきまえ - in front of station/หน้าสถานี)"],tags:["station","สถานี","transport"],level:"N5"},
+  {kanji:"道",reading:"ドウ/みち",meaning:"Road (ถนน)",tips:"เดิน(辶)+หัว(首) = นำทาง Walk+head = lead the way",compounds:["道 (みち - road/ถนน)", "水道 (すいどう - water supply/ประปา)", "北海道 (ほっかいどう - Hokkaido)"],tags:["road","way","ถนน"],level:"N5"},
+  {kanji:"家",reading:"カ/いえ",meaning:"House (บ้าน)",tips:"หลังคา+หมู = บ้านเลี้ยงหมู Roof+pig = home",compounds:["家 (いえ - house/บ้าน)", "家族 (かぞく - family/ครอบครัว)", "作家 (さっか - author/นักเขียน)"],tags:["house","home","บ้าน"],level:"N5"},
+  // --- N5: Colors ---
+  {kanji:"白",reading:"ハク/しろ(い)",meaning:"White (ขาว)",tips:"แสงแดดทำให้ขาว Sunlight = white",compounds:["白い (しろい - white/ขาว)", "面白い (おもしろい - interesting/น่าสนใจ)"],tags:["white","ขาว","color"],level:"N5"},
+  {kanji:"赤",reading:"セキ/あか(い)",meaning:"Red (แดง)",tips:"ดิน+ไฟ = ดินเผาแดง Earth+fire = burned red",compounds:["赤い (あかい - red/แดง)", "赤ちゃん (あかちゃん - baby/ทารก)"],tags:["red","แดง","color"],level:"N5"},
+  {kanji:"青",reading:"セイ/あお(い)",meaning:"Blue (น้ำเงิน)",tips:"ต้นไม้+ดวงจันทร์ = สีธรรมชาติยามค่ำ Plant+moon = night color",compounds:["青い (あおい - blue/น้ำเงิน)", "青空 (あおぞら - blue sky/ท้องฟ้าสีคราม)", "青年 (せいねん - youth/วัยรุ่น)"],tags:["blue","green","น้ำเงิน","color"],level:"N5"},
+  {kanji:"黒",reading:"コク/くろ(い)",meaning:"Black (ดำ)",tips:"หมู่บ้าน+ไฟ = ควันดำ Village+fire = black smoke",compounds:["黒い (くろい - black/ดำ)", "黒板 (こくばん - blackboard/กระดานดำ)"],tags:["black","ดำ","color"],level:"N5"},
+  // --- N5: Tech & Transport ---
+  {kanji:"電",reading:"デン/-",meaning:"Electricity (ไฟฟ้า)",tips:"ฝน+ฟ้าผ่า = ไฟฟ้า Rain+lightning = electricity",compounds:["電車 (でんしゃ - train/รถไฟ)", "電話 (でんわ - telephone/โทรศัพท์)", "電気 (でんき - electricity/ไฟฟ้า)", "電池 (でんち - battery/แบตเตอรี่)"],tags:["electricity","ไฟฟ้า","technology"],level:"N5"},
+  {kanji:"車",reading:"シャ/くるま",meaning:"Car (รถ)",tips:"รถเข็นมีล้อ Cart with wheels",compounds:["電車 (でんしゃ - train/รถไฟ)", "自動車 (じどうしゃ - car/รถยนต์)"],tags:["car","vehicle","รถ","transport"],level:"N5"},
+  {kanji:"金",reading:"キン/かね",meaning:"Gold, Money (ทอง, เงิน)",tips:"หลังคา+ดินมีทอง Roof+earth with gold",compounds:["金曜日 (きんようび - Friday/วันศุกร์)", "お金 (おかね - money/เงิน)", "料金 (りょうきん - fee/ค่าธรรมเนียม)"],tags:["gold","money","ทอง","เงิน"],level:"N5"},
+  {kanji:"本",reading:"ホン/もと",meaning:"Book (หนังสือ)",tips:"ต้นไม้+ราก = ต้นกำเนิด → หนังสือ Tree+root = origin → book",compounds:["日本 (にほん - Japan/ญี่ปุ่น)", "本当 (ほんとう - really/จริงๆ)", "本屋 (ほんや - bookstore/ร้านหนังสือ)"],tags:["book","origin","หนังสือ"],level:"N5"},
+  {kanji:"気",reading:"キ/-",meaning:"Spirit, Energy (จิตใจ, อากาศ)",tips:"ไอน้ำจากข้าวร้อน Steam from hot rice",compounds:["天気 (てんき - weather/อากาศ)", "元気 (げんき - healthy/สบายดี)", "人気 (にんき - popular/ยอดนิยม)", "気持ち (きもち - feeling/ความรู้สึก)"],tags:["spirit","energy","air","จิตใจ","อากาศ"],level:"N5"},
+  // --- N5: Directions ---
+  {kanji:"東",reading:"トウ/ひがし",meaning:"East (ตะวันออก)",tips:"ดวงอาทิตย์ขึ้นจากต้นไม้ Sun rising from tree = east",compounds:["東 (ひがし - east/ตะวันออก)", "東京 (とうきょう - Tokyo/โตเกียว)"],tags:["east","ตะวันออก","direction"],level:"N5"},
+  {kanji:"西",reading:"セイ/にし",meaning:"West (ตะวันตก)",tips:"นกกลับรังตอนตะวันตก Birds return when sun sets west",compounds:["西 (にし - west/ตะวันตก)", "西洋 (せいよう - the West/ตะวันตก)"],tags:["west","ตะวันตก","direction"],level:"N5"},
+  {kanji:"南",reading:"ナン/みなみ",meaning:"South (ใต้)",tips:"ทิศที่อบอุ่น Warm direction = south",compounds:["南 (みなみ - south/ใต้)"],tags:["south","ใต้","direction"],level:"N5"},
+  {kanji:"北",reading:"ホク/きた",meaning:"North (เหนือ)",tips:"สองคนหันหลังชนกัน = เย็น Two backs = cold = north",compounds:["北 (きた - north/เหนือ)", "北海道 (ほっかいどう - Hokkaido/ฮอกไกโด)"],tags:["north","เหนือ","direction"],level:"N5"},
+  {kanji:"上",reading:"ジョウ/うえ",meaning:"Up (บน)",tips:"เส้นชี้ขึ้น Line pointing up",compounds:["上 (うえ - above/ข้างบน)", "上手 (じょうず - skilled/เก่ง)"],tags:["up","above","บน","direction"],level:"N5"},
+  {kanji:"下",reading:"カ/した",meaning:"Down (ล่าง)",tips:"เส้นชี้ลง Line pointing down",compounds:["下 (した - below/ข้างล่าง)", "下手 (へた - unskilled/ไม่เก่ง)", "地下鉄 (ちかてつ - subway/รถไฟใต้ดิน)"],tags:["down","below","ล่าง","direction"],level:"N5"},
+  {kanji:"外",reading:"ガイ/そと",meaning:"Outside (ข้างนอก)",tips:"เย็น+ทำนาย = ข้างนอกยามค่ำ Evening+divine = outside at night",compounds:["外 (そと - outside/ข้างนอก)", "外国 (がいこく - foreign country/ต่างประเทศ)", "海外 (かいがい - overseas/ต่างประเทศ)"],tags:["outside","ข้างนอก"],level:"N5"},
+  // --- N4: Extended vocab ---
+  {kanji:"売",reading:"バイ/う(る)",meaning:"Sell (ขาย)",tips:"買(ซื้อ)の上部+士 = ขาย / Top of 買+warrior radical = sell",compounds:["売る (うる - to sell/ขาย)", "販売 (はんばい - sales/การขาย)"],tags:["sell","ขาย","shopping"],level:"N4"},
+  {kanji:"走",reading:"ソウ/はし(る)",meaning:"Run (วิ่ง)",tips:"ดิน+ขาวิ่ง Earth+running legs",compounds:["走る (はしる - to run/วิ่ง)"],tags:["run","วิ่ง","sport"],level:"N4"},
+  {kanji:"歩",reading:"ホ/ある(く)",meaning:"Walk (เดิน)",tips:"เท้าขวา+เท้าซ้าย = เดิน Right+left foot = walk",compounds:["歩く (あるく - to walk/เดิน)", "散歩 (さんぽ - stroll/เดินเล่น)", "歩道 (ほどう - sidewalk/ทางเท้า)"],tags:["walk","เดิน"],level:"N4"},
+  {kanji:"病",reading:"ビョウ/やまい",meaning:"Illness (ป่วย)",tips:"เตียงคนป่วย+ไข้ Sick bed+fever",compounds:["病気 (びょうき - illness/ป่วย)", "病院 (びょういん - hospital/โรงพยาบาล)"],tags:["illness","sick","ป่วย","health"],level:"N4"},
+  {kanji:"会",reading:"カイ/あ(う)",meaning:"Meet (พบ)",tips:"ฝาครอบ+พูด = มาพบกันคุย Cover+speak = meeting to talk",compounds:["会う (あう - to meet/พบ)", "会社 (かいしゃ - company/บริษัท)", "会話 (かいわ - conversation/สนทนา)", "会議 (かいぎ - meeting/ประชุม)"],tags:["meet","meeting","พบ"],level:"N4"},
+  {kanji:"社",reading:"シャ/やしろ",meaning:"Company (บริษัท)",tips:"ศักดิ์สิทธิ์+ดิน = สถานที่ Sacred+earth = place",compounds:["会社 (かいしゃ - company/บริษัท)", "社長 (しゃちょう - president/ประธาน)", "社会 (しゃかい - society/สังคม)", "神社 (じんじゃ - shrine/ศาลเจ้า)"],tags:["company","shrine","บริษัท"],level:"N4"},
+  {kanji:"仕",reading:"シ/つか(える)",meaning:"Work (ทำงาน)",tips:"คน+นักรบ = รับใช้ Person+warrior = serve",compounds:["仕事 (しごと - work/งาน)"],tags:["work","serve","ทำงาน"],level:"N4"},
+  {kanji:"事",reading:"ジ/こと",meaning:"Thing (เรื่อง)",tips:"มือ+ธง = จัดการเรื่อง Hand+flag = manage matters",compounds:["仕事 (しごと - work/งาน)", "食事 (しょくじ - meal/อาหาร)", "火事 (かじ - fire/ไฟไหม้)", "大事 (だいじ - important/สำคัญ)"],tags:["thing","matter","เรื่อง"],level:"N4"},
+  {kanji:"物",reading:"ブツ/もの",meaning:"Thing, Object (สิ่งของ)",tips:"วัว+อย่า = จับต้องได้ Cow+don't = tangible",compounds:["物 (もの - thing/สิ่งของ)", "買い物 (かいもの - shopping/ช้อปปิ้ง)", "食べ物 (たべもの - food/อาหาร)", "動物 (どうぶつ - animal/สัตว์)"],tags:["thing","object","สิ่งของ"],level:"N4"},
+  {kanji:"思",reading:"シ/おも(う)",meaning:"Think (คิด)",tips:"สมอง(田)+จิตใจ(心) Brain+heart = think",compounds:["思う (おもう - to think/คิด)", "思い出 (おもいで - memory/ความทรงจำ)"],tags:["think","คิด"],level:"N4"},
+  {kanji:"知",reading:"チ/し(る)",meaning:"Know (รู้)",tips:"ลูกศร+ปาก = พูดตรง Arrow+mouth = speak straight = know",compounds:["知る (しる - to know/รู้)", "知識 (ちしき - knowledge/ความรู้)"],tags:["know","รู้"],level:"N4"},
+  // --- N4: Seasons ---
+  {kanji:"春",reading:"シュン/はる",meaning:"Spring (ฤดูใบไม้ผลิ)",tips:"แดดส่องต้นไม้โต Sun grows plants = spring",compounds:["春 (はる - spring/ฤดูใบไม้ผลิ)", "青春 (せいしゅん - youth/วัยหนุ่มสาว)"],tags:["spring","ฤดูใบไม้ผลิ","season"],level:"N4"},
+  {kanji:"夏",reading:"カ/なつ",meaning:"Summer (ฤดูร้อน)",tips:"คนเต้นเทศกาลฤดูร้อน Person dancing at summer festival",compounds:["夏 (なつ - summer/ฤดูร้อน)", "夏休み (なつやすみ - summer break/ปิดเทอมฤดูร้อน)"],tags:["summer","ฤดูร้อน","season"],level:"N4"},
+  {kanji:"秋",reading:"シュウ/あき",meaning:"Autumn (ฤดูใบไม้ร่วง)",tips:"ข้าว+ไฟ = เผาหลังเก็บเกี่ยว Rice+fire = burning after harvest",compounds:["秋 (あき - autumn/ฤดูใบไม้ร่วง)"],tags:["autumn","fall","ฤดูใบไม้ร่วง","season"],level:"N4"},
+  {kanji:"冬",reading:"トウ/ふゆ",meaning:"Winter (ฤดูหนาว)",tips:"น้ำแข็งห้อยลงมา Icicles hanging = cold",compounds:["冬 (ふゆ - winter/ฤดูหนาว)", "冬休み (ふゆやすみ - winter break/ปิดเทอมฤดูหนาว)"],tags:["winter","ฤดูหนาว","season"],level:"N4"},
+  // --- N4: Animals & Food ---
+  {kanji:"魚",reading:"ギョ/さかな",meaning:"Fish (ปลา)",tips:"หัว+ลำตัว+หาง = ปลาทั้งตัว Head+body+tail = whole fish",compounds:["魚 (さかな - fish/ปลา)", "金魚 (きんぎょ - goldfish/ปลาทอง)", "焼き魚 (やきざかな - grilled fish/ปลาย่าง)"],tags:["fish","ปลา","food","animal"],level:"N4"},
+  {kanji:"肉",reading:"ニク/-",meaning:"Meat (เนื้อ)",tips:"เนื้อตากแห้ง Dried meat pieces",compounds:["肉 (にく - meat/เนื้อ)", "牛肉 (ぎゅうにく - beef/เนื้อวัว)", "焼肉 (やきにく - grilled meat/เนื้อย่าง)"],tags:["meat","เนื้อ","food"],level:"N4"},
+  {kanji:"茶",reading:"チャ/-",meaning:"Tea (ชา)",tips:"พืช+คน+ไม้ = ใบจากต้นไม้ Plant+person+tree = leaves from tree",compounds:["お茶 (おちゃ - tea/ชา)", "茶色 (ちゃいろ - brown/สีน้ำตาล)", "喫茶店 (きっさてん - café/ร้านกาแฟ)"],tags:["tea","ชา","drink","food"],level:"N4"},
+  {kanji:"犬",reading:"ケン/いぬ",meaning:"Dog (สุนัข)",tips:"大+จุด = สัตว์ใหญ่ Big+dot = large animal = dog",compounds:["犬 (いぬ - dog/สุนัข)", "子犬 (こいぬ - puppy/ลูกสุนัข)"],tags:["dog","สุนัข","animal"],level:"N4"},
+  {kanji:"猫",reading:"ビョウ/ねこ",meaning:"Cat (แมว)",tips:"สัตว์+ต้นกล้า = ซ่อนในทุ่ง Animal+seedling = hiding in field",compounds:["猫 (ねこ - cat/แมว)", "子猫 (こねこ - kitten/ลูกแมว)"],tags:["cat","แมว","animal"],level:"N4"},
+  {kanji:"鳥",reading:"チョウ/とり",meaning:"Bird (นก)",tips:"รูปนกมีหัว ปีก หาง Bird with head, wings, tail",compounds:["鳥 (とり - bird/นก)", "焼き鳥 (やきとり - grilled chicken/ไก่ย่าง)"],tags:["bird","นก","animal"],level:"N4"},
+  // --- N4: Motion & Actions ---
+  {kanji:"動",reading:"ドウ/うご(く)",meaning:"Move (เคลื่อนที่)",tips:"หนัก+แรง = เคลื่อนของหนัก Heavy+power = move heavy things",compounds:["動く (うごく - to move/เคลื่อนที่)", "動物 (どうぶつ - animal/สัตว์)", "自動 (じどう - automatic/อัตโนมัติ)"],tags:["move","เคลื่อนที่"],level:"N4"},
+  {kanji:"音",reading:"オン/おと",meaning:"Sound (เสียง)",tips:"ยืน+วัน = เสียงลอยขึ้น Stand+day = sound rising",compounds:["音 (おと - sound/เสียง)", "音楽 (おんがく - music/ดนตรี)", "発音 (はつおん - pronunciation/การออกเสียง)"],tags:["sound","เสียง"],level:"N4"},
+  {kanji:"地",reading:"チ/じ",meaning:"Ground (พื้นดิน)",tips:"ดิน+แผ่กว้าง Earth spreading wide",compounds:["地図 (ちず - map/แผนที่)", "土地 (とち - land/ที่ดิน)", "地下鉄 (ちかてつ - subway/รถไฟใต้ดิน)"],tags:["ground","earth","พื้นดิน"],level:"N4"},
+  {kanji:"持",reading:"ジ/も(つ)",meaning:"Hold, Have (ถือ, มี)",tips:"มือ+วัด = ถือสิ่งศักดิ์สิทธิ์ Hand+temple = hold sacred",compounds:["持つ (もつ - to hold/ถือ)", "気持ち (きもち - feeling/ความรู้สึก)"],tags:["hold","have","ถือ","มี"],level:"N4"},
+  {kanji:"待",reading:"タイ/ま(つ)",meaning:"Wait (รอ)",tips:"ทางเดิน+วัด = ยืนรอที่วัด Road+temple = waiting",compounds:["待つ (まつ - to wait/รอ)", "期待 (きたい - expectation/ความคาดหวัง)", "招待 (しょうたい - invitation/คำเชิญ)"],tags:["wait","รอ"],level:"N4"},
+  {kanji:"使",reading:"シ/つか(う)",meaning:"Use (ใช้)",tips:"คน+เจ้าหน้าที่ = ส่งไปใช้งาน Person+official = sent to work",compounds:["使う (つかう - to use/ใช้)", "大使 (たいし - ambassador/ทูต)"],tags:["use","ใช้"],level:"N4"},
+  {kanji:"作",reading:"サク/つく(る)",meaning:"Make (ทำ, สร้าง)",tips:"คน+ทำงาน = สร้าง Person+work = create",compounds:["作る (つくる - to make/ทำ)", "作文 (さくぶん - essay/เรียงความ)", "作品 (さくひん - work/ผลงาน)"],tags:["make","create","ทำ","สร้าง"],level:"N4"},
+  {kanji:"開",reading:"カイ/あ(ける)",meaning:"Open (เปิด)",tips:"ประตู+เปิด = เปิดประตู Gate+open = open gate",compounds:["開ける (あける - to open/เปิด)", "公開 (こうかい - public/เปิดเผย)"],tags:["open","เปิด"],level:"N4"},
+  {kanji:"起",reading:"キ/お(きる)",meaning:"Wake up (ตื่น)",tips:"วิ่ง+ตัวเอง = ลุกขึ้น Run+self = getting up",compounds:["起きる (おきる - wake up/ตื่น)", "起こる (おこる - to occur/เกิดขึ้น)"],tags:["wake","rise","ตื่น","daily"],level:"N4"},
+  {kanji:"寝",reading:"シン/ね(る)",meaning:"Sleep (นอน)",tips:"หลังคา+เตียง+หมอน Roof+bed+pillow = sleeping",compounds:["寝る (ねる - to sleep/นอน)", "寝室 (しんしつ - bedroom/ห้องนอน)"],tags:["sleep","นอน","daily"],level:"N4"},
+  {kanji:"色",reading:"ショク/いろ",meaning:"Color (สี)",tips:"ใบหน้าเปลี่ยนสี Face changing color",compounds:["色 (いろ - color/สี)", "茶色 (ちゃいろ - brown/น้ำตาล)", "景色 (けしき - scenery/ทิวทัศน์)"],tags:["color","สี"],level:"N4"},
+  // --- N4: New additions (v07) ---
+  {kanji:"悪",reading:"アク/わる(い)",meaning:"Bad, Evil (แย่, ชั่ว)",tips:"亜+心 = ไม่ดีในใจ Not-good heart = bad",compounds:["悪い (わるい - bad/แย่)", "悪人 (あくにん - villain/คนชั่ว)", "最悪 (さいあく - worst/แย่ที่สุด)"],tags:["bad","evil","แย่"],level:"N4"},
+  {kanji:"意",reading:"イ",meaning:"Meaning, Intention (ความหมาย, เจตนา)",tips:"音(เสียง)+心(ใจ) = ตั้งใจฟัง Sound+heart = listen with intent",compounds:["意味 (いみ - meaning/ความหมาย)", "注意 (ちゅうい - caution/ระวัง)", "意見 (いけん - opinion/ความเห็น)", "意外 (いがい - unexpected/ไม่คาดคิด)"],tags:["meaning","intention","ความหมาย"],level:"N4"},
+  {kanji:"医",reading:"イ",meaning:"Medicine, Doctor (แพทย์, ยา)",tips:"矢(ลูกธนู)+医箱 = เครื่องมือรักษา Medical tools = heal",compounds:["医者 (いしゃ - doctor/แพทย์)", "医学 (いがく - medicine/การแพทย์)", "歯医者 (はいしゃ - dentist/ทันตแพทย์)"],tags:["medicine","doctor","แพทย์"],level:"N4"},
+  {kanji:"運",reading:"ウン/はこ(ぶ)",meaning:"Luck, Transport (โชค, ขนส่ง)",tips:"เดิน(辶)+ทหาร = เคลื่อนทัพ Walk+army = move = transport/luck",compounds:["運動 (うんどう - exercise/ออกกำลังกาย)", "運転 (うんてん - drive/ขับรถ)", "幸運 (こううん - good luck/โชคดี)", "運命 (うんめい - fate/ชะตากรรม)"],tags:["luck","transport","โชค"],level:"N4"},
+  {kanji:"映",reading:"エイ/うつ(る)",meaning:"Reflect, Film (สะท้อน, ภาพยนตร์)",tips:"日(แดด)+央(กลาง) = แสงสะท้อนกลาง Sun+center = light reflects",compounds:["映画 (えいが - movie/ภาพยนตร์)", "映像 (えいぞう - image/ภาพ)", "上映 (じょうえい - showing/ฉาย)"],tags:["movie","reflect","ภาพยนตร์"],level:"N4"},
+  {kanji:"遠",reading:"エン/とお(い)",meaning:"Far (ไกล)",tips:"เดิน(辶)+ยาว(袁) = เดินทางไกล Walk+long = travel far",compounds:["遠い (とおい - far/ไกล)", "遠足 (えんそく - field trip/ทัศนศึกษา)", "永遠 (えいえん - eternity/นิรันดร์)"],tags:["far","distance","ไกล"],level:"N4"},
+  {kanji:"屋",reading:"オク/や",meaning:"Roof, Shop (ร้าน, ห้อง)",tips:"หลังคา+ถึง(至) = ร้านค้ามีหลังคา Roof+reach = shop",compounds:["本屋 (ほんや - bookstore/ร้านหนังสือ)", "肉屋 (にくや - butcher/ร้านเนื้อ)", "部屋 (へや - room/ห้อง)", "屋根 (やね - roof/หลังคา)"],tags:["shop","room","ร้าน","ห้อง"],level:"N4"},
+  {kanji:"回",reading:"カイ/まわ(る)",meaning:"Rotate, Times (รอบ, ครั้ง)",tips:"วงกลมในกรอบ = หมุนรอบ Circle in frame = rotate",compounds:["回る (まわる - to rotate/หมุน)", "今回 (こんかい - this time/ครั้งนี้)", "回答 (かいとう - answer/คำตอบ)", "回復 (かいふく - recovery/ฟื้นตัว)"],tags:["rotate","times","รอบ","ครั้ง"],level:"N4"},
+  {kanji:"界",reading:"カイ",meaning:"World, Boundary (โลก, ขอบเขต)",tips:"田(นา)+介(ระหว่าง) = ขอบเขต Field+between = boundary",compounds:["世界 (せかい - world/โลก)", "限界 (げんかい - limit/ขีดจำกัด)", "業界 (ぎょうかい - industry/อุตสาหกรรม)"],tags:["world","boundary","โลก"],level:"N4"},
+  {kanji:"形",reading:"ケイ/かたち",meaning:"Shape, Form (รูปร่าง)",tips:"左+彡(เส้น) = รูปทรง Left+stripes = shape/form",compounds:["形 (かたち - shape/รูปร่าง)", "人形 (にんぎょう - doll/ตุ๊กตา)", "形式 (けいしき - format/รูปแบบ)"],tags:["shape","form","รูปร่าง"],level:"N4"},
+  {kanji:"帰",reading:"キ/かえ(る)",meaning:"Return Home (กลับบ้าน)",tips:"ม้วนธงกลับ = กลับสู่ด้ามธง Return to flagpole = go back",compounds:["帰る (かえる - to return/กลับ)", "帰国 (きこく - return to country/กลับประเทศ)", "帰宅 (きたく - return home/กลับบ้าน)"],tags:["return","home","กลับ"],level:"N4"},
+  {kanji:"記",reading:"キ/しる(す)",meaning:"Record, Note (บันทึก)",tips:"คำ(言)+ฉัน(己) = จดบันทึก Words+self = record",compounds:["記念 (きねん - commemoration/อนุสรณ์)", "日記 (にっき - diary/บันทึกประจำวัน)", "記録 (きろく - record/บันทึก)"],tags:["record","note","บันทึก"],level:"N4"},
+  {kanji:"客",reading:"キャク",meaning:"Guest, Customer (ลูกค้า, แขก)",tips:"หลังคา+ลงมาแต่ละคน = แขกมาพัก Roof+each = guest stays",compounds:["客 (きゃく - guest/แขก)", "お客さん (おきゃくさん - customer/ลูกค้า)", "観客 (かんきゃく - audience/ผู้ชม)"],tags:["guest","customer","ลูกค้า","แขก"],level:"N4"},
+  {kanji:"急",reading:"キュウ/いそ(ぐ)",meaning:"Hurry, Emergency (รีบ, ฉุกเฉิน)",tips:"ใจ(心)ที่เร่งรีบ Heart racing = urgent",compounds:["急ぐ (いそぐ - to hurry/รีบ)", "急行 (きゅうこう - express/ด่วน)", "緊急 (きんきゅう - emergency/ฉุกเฉิน)", "急に (きゅうに - suddenly/ทันใดนั้น)"],tags:["hurry","emergency","รีบ"],level:"N4"},
+  {kanji:"牛",reading:"ギュウ/うし",meaning:"Cow, Beef (วัว, เนื้อวัว)",tips:"รูปวัวมีเขา Cow silhouette with horns",compounds:["牛肉 (ぎゅうにく - beef/เนื้อวัว)", "牛乳 (ぎゅうにゅう - milk/นม)", "牛丼 (ぎゅうどん - beef bowl/ข้าวหน้าเนื้อ)"],tags:["cow","beef","วัว","food"],level:"N4"},
+  {kanji:"語",reading:"ゴ/かた(る)",meaning:"Language, Word (ภาษา, คำ)",tips:"คำ(言)+ฉัน(吾) = ภาษาของฉัน Words+I = my language",compounds:["日本語 (にほんご - Japanese/ภาษาญี่ปุ่น)", "英語 (えいご - English/ภาษาอังกฤษ)", "語る (かたる - to tell/เล่า)", "物語 (ものがたり - story/นิทาน)"],tags:["language","word","ภาษา"],level:"N4"},
+  {kanji:"工",reading:"コウ",meaning:"Work, Craft (งานช่าง, สร้าง)",tips:"เสา+แท่น = งานช่าง Pillar+platform = construction",compounds:["工場 (こうじょう - factory/โรงงาน)", "工事 (こうじ - construction/ก่อสร้าง)", "工業 (こうぎょう - industry/อุตสาหกรรม)", "人工 (じんこう - artificial/เทียม)"],tags:["work","craft","construction","งาน"],level:"N4"},
+  {kanji:"広",reading:"コウ/ひろ(い)",meaning:"Wide, Spacious (กว้าง)",tips:"หลังคา+เนื้อที่ = พื้นที่กว้าง Roof+space = wide space",compounds:["広い (ひろい - wide/กว้าง)", "広場 (ひろば - plaza/ลานกว้าง)", "広告 (こうこく - advertisement/โฆษณา)"],tags:["wide","spacious","กว้าง"],level:"N4"},
+  {kanji:"公",reading:"コウ",meaning:"Public, Official (สาธารณะ, ทางการ)",tips:"แบ่ง(八)+ส่วนรวม(ム) = แบ่งให้สาธารณะ Divide+common = public",compounds:["公園 (こうえん - park/สวนสาธารณะ)", "公式 (こうしき - official/ทางการ)", "公開 (こうかい - release/เปิดเผย)"],tags:["public","official","สาธารณะ"],level:"N4"},
+  {kanji:"交",reading:"コウ/まじ(わる)",meaning:"Mix, Exchange (แลกเปลี่ยน, ผสม)",tips:"ขาไขว้กัน = แลกเปลี่ยน Legs crossing = interchange",compounds:["交通 (こうつう - traffic/การจราจร)", "交換 (こうかん - exchange/แลกเปลี่ยน)", "交際 (こうさい - relationship/การสมาคม)"],tags:["exchange","traffic","แลกเปลี่ยน"],level:"N4"},
+  {kanji:"光",reading:"コウ/ひかり",meaning:"Light, Shine (แสง, เปล่งประกาย)",tips:"ไฟ+คน = คนถือไฟ Fire+person = torch bearer",compounds:["光 (ひかり - light/แสง)", "光る (ひかる - to shine/เปล่งแสง)", "観光 (かんこう - sightseeing/ท่องเที่ยว)", "日光 (にっこう - sunlight/แสงอาทิตย์)"],tags:["light","shine","แสง"],level:"N4"},
+  {kanji:"考",reading:"コウ/かんが(える)",meaning:"Think, Consider (คิด, พิจารณา)",tips:"ผู้อาวุโส(老)+โค้ง = คนแก่ก้มคิด Elder pondering",compounds:["考える (かんがえる - to think/คิด)", "考え (かんがえ - thought/ความคิด)", "参考 (さんこう - reference/อ้างอิง)"],tags:["think","consider","คิด"],level:"N4"},
+  {kanji:"答",reading:"トウ/こた(える)",meaning:"Answer, Reply (คำตอบ, ตอบ)",tips:"竹(ไม้ไผ่)+合(ตรงกัน) = เขียนบนกระดาษไม้ไผ่ Bamboo+match = written answer",compounds:["答える (こたえる - to answer/ตอบ)", "答え (こたえ - answer/คำตอบ)", "回答 (かいとう - response/การตอบ)"],tags:["answer","reply","คำตอบ"],level:"N4"},
+  {kanji:"才",reading:"サイ",meaning:"Talent, Age (พรสวรรค์, อายุ)",tips:"ต้นอ่อนงอก = ความสามารถ Young shoot = budding talent",compounds:["才能 (さいのう - talent/พรสวรรค์)", "天才 (てんさい - genius/อัจฉริยะ)", "二十才 (はたち - 20 years old/อายุ 20)"],tags:["talent","age","พรสวรรค์"],level:"N4"},
+  {kanji:"市",reading:"シ/いち",meaning:"City, Market (เมือง, ตลาด)",tips:"ผ้าใบ+ด้ามธง = ตลาด Cloth+pole = market stall",compounds:["市場 (いちば - market/ตลาด)", "都市 (とし - city/เมือง)", "市民 (しみん - citizen/พลเมือง)"],tags:["city","market","เมือง","ตลาด"],level:"N4"},
+  {kanji:"始",reading:"シ/はじ(める)",meaning:"Begin, Start (เริ่มต้น)",tips:"ผู้หญิง(女)+อาหาร(台) = แม่เริ่มทำอาหาร Woman+food = begin cooking",compounds:["始める (はじめる - to begin/เริ่ม)", "始まる (はじまる - to start/เริ่มต้น)", "開始 (かいし - start/เริ่มต้น)"],tags:["begin","start","เริ่มต้น"],level:"N4"},
+  {kanji:"試",reading:"シ/ため(す)",meaning:"Test, Try (ทดสอบ, ลอง)",tips:"คำ(言)+ความพยายาม(式) = ทดสอบ Words+style = test",compounds:["試験 (しけん - exam/สอบ)", "試合 (しあい - match/การแข่งขัน)", "試す (ためす - to try/ลอง)", "試食 (ししょく - tasting/ชิมอาหาร)"],tags:["test","exam","สอบ","ลอง"],level:"N4"},
+  {kanji:"室",reading:"シツ",meaning:"Room, Chamber (ห้อง)",tips:"หลังคา+ถึง(至) = ห้องที่เข้าถึงได้ Roof+reach = reachable room",compounds:["教室 (きょうしつ - classroom/ห้องเรียน)", "室内 (しつない - indoor/ในร่ม)", "寝室 (しんしつ - bedroom/ห้องนอน)"],tags:["room","chamber","ห้อง"],level:"N4"},
+  {kanji:"写",reading:"シャ/うつ(す)",meaning:"Copy, Photo (ถ่ายภาพ, คัดลอก)",tips:"หลังคา+ที่ต่ำ = เทลงบนกระดาษ Roof+low = pour down = copy",compounds:["写真 (しゃしん - photo/ภาพถ่าย)", "写す (うつす - to copy/คัดลอก)", "映写 (えいしゃ - projection/ฉายภาพ)"],tags:["photo","copy","ภาพถ่าย"],level:"N4"},
+  {kanji:"弱",reading:"ジャク/よわ(い)",meaning:"Weak (อ่อนแอ)",tips:"ธนูสองคันอ่อน Two weak bows = weakness",compounds:["弱い (よわい - weak/อ่อนแอ)", "弱点 (じゃくてん - weakness/จุดอ่อน)", "弱虫 (よわむし - coward/คนขลาด)"],tags:["weak","อ่อนแอ"],level:"N4"},
+  {kanji:"主",reading:"シュ/ぬし",meaning:"Main, Master (หลัก, เจ้าของ)",tips:"จุดบนเสา = ดาวนำทาง = หัวหน้า Dot on pillar = guiding star = master",compounds:["主人 (しゅじん - husband/master/สามี)", "主語 (しゅご - subject/ประธาน)", "家主 (やぬし - landlord/เจ้าของบ้าน)", "主役 (しゅやく - main role/นักแสดงนำ)"],tags:["main","master","หลัก","เจ้าของ"],level:"N4"},
+  {kanji:"首",reading:"シュ/くび",meaning:"Neck, Head (คอ, หัว)",tips:"รูปหัว+ด้านบน = ส่วนบนของร่างกาย Head+above = top of body",compounds:["首 (くび - neck/คอ)", "首相 (しゅしょう - prime minister/นายกรัฐมนตรี)", "首都 (しゅと - capital/เมืองหลวง)"],tags:["neck","head","คอ","body"],level:"N4"},
+  {kanji:"世",reading:"セ/よ",meaning:"World, Generation (โลก, รุ่น)",tips:"สามสิบปีหนึ่งรุ่น Three decades = one generation",compounds:["世界 (せかい - world/โลก)", "世話 (せわ - care/ดูแล)", "世代 (せだい - generation/รุ่น)"],tags:["world","generation","โลก","รุ่น"],level:"N4"},
+  {kanji:"切",reading:"セツ/き(る)",meaning:"Cut, Important (ตัด, สำคัญ)",tips:"七+刀 = มีดตัด Seven+knife = slice",compounds:["切る (きる - to cut/ตัด)", "大切 (たいせつ - important/สำคัญ)", "切符 (きっぷ - ticket/ตั๋ว)", "親切 (しんせつ - kind/ใจดี)"],tags:["cut","important","ตัด","สำคัญ"],level:"N4"},
+  {kanji:"送",reading:"ソウ/おく(る)",meaning:"Send (ส่ง)",tips:"เดิน(辶)+ส่งออกไป Walk+related = send off",compounds:["送る (おくる - to send/ส่ง)", "放送 (ほうそう - broadcast/ออกอากาศ)", "送料 (そうりょう - shipping/ค่าส่ง)"],tags:["send","ส่ง"],level:"N4"},
+  {kanji:"代",reading:"ダイ/か(わる)",meaning:"Generation, Replace (รุ่น, แทน)",tips:"คน(イ)+แทน(弋) = แทนคน Person+exchange = substitute",compounds:["時代 (じだい - era/ยุคสมัย)", "代わり (かわり - substitute/แทน)", "代金 (だいきん - payment/ราคา)", "年代 (ねんだい - era/ยุค)"],tags:["generation","replace","รุ่น","แทน"],level:"N4"},
+  {kanji:"台",reading:"ダイ",meaning:"Platform, Stand (แท่น, ฐาน)",tips:"口+至 = ฐานรองรับ Mouth+reach = platform to speak from",compounds:["台風 (たいふう - typhoon/ไต้ฝุ่น)", "台所 (だいどころ - kitchen/ห้องครัว)", "舞台 (ぶたい - stage/เวที)"],tags:["platform","stage","แท่น","เวที"],level:"N4"},
+  {kanji:"着",reading:"チャク/き(る)",meaning:"Arrive, Wear (มาถึง, สวมใส่)",tips:"แกะ(羊)+ตา(目)+คน(人) = คนสวมเสื้อขนสัตว์ Sheep+eye+person = wearing wool",compounds:["着る (きる - to wear/สวมใส่)", "着く (つく - to arrive/มาถึง)", "着物 (きもの - kimono/กิโมโน)"],tags:["arrive","wear","สวมใส่","มาถึง"],level:"N4"},
+  {kanji:"通",reading:"ツウ/とお(る)",meaning:"Pass, Commute (ผ่าน, สัญจร)",tips:"เดิน(辶)+ทะลุ(甬) = ผ่านทะลุ Walk+through = pass through",compounds:["通る (とおる - to pass/ผ่าน)", "通学 (つうがく - commute to school/ไปโรงเรียน)", "交通 (こうつう - traffic/จราจร)"],tags:["pass","commute","ผ่าน"],level:"N4"},
+  {kanji:"低",reading:"テイ/ひく(い)",meaning:"Low (ต่ำ)",tips:"คน(イ)+ก้มต่ำ = คนก้มลง Person bowing low",compounds:["低い (ひくい - low/ต่ำ)", "低下 (ていか - decline/ลดลง)", "最低 (さいてい - minimum/ต่ำที่สุด)"],tags:["low","ต่ำ"],level:"N4"},
+  {kanji:"内",reading:"ナイ/うち",meaning:"Inside, Within (ข้างใน, ภายใน)",tips:"กรอบ+เส้นใน = ข้างใน Frame+inside = interior",compounds:["内 (うち - inside/ข้างใน)", "案内 (あんない - guide/นำทาง)", "国内 (こくない - domestic/ในประเทศ)"],tags:["inside","within","ข้างใน"],level:"N4"},
+  {kanji:"熱",reading:"ネツ/あつ(い)",meaning:"Heat, Fever (ความร้อน, ไข้)",tips:"ดิน+ไฟ+ทำ = ไฟเผาร้อน Earth+fire+make = burning hot",compounds:["熱い (あつい - hot/ร้อน)", "熱心 (ねっしん - enthusiastic/กระตือรือร้น)", "発熱 (はつねつ - fever/มีไข้)"],tags:["heat","fever","hot","ร้อน"],level:"N4"},
+  {kanji:"乗",reading:"ジョウ/の(る)",meaning:"Ride, Board (โดยสาร, ขึ้น)",tips:"คนขึ้นต้นไม้ = ขึ้น Person climbing tree = riding up",compounds:["乗る (のる - to ride/ขึ้น)", "乗り物 (のりもの - vehicle/ยานพาหนะ)", "乗客 (じょうきゃく - passenger/ผู้โดยสาร)"],tags:["ride","board","โดยสาร"],level:"N4"},
+  {kanji:"番",reading:"バン",meaning:"Number, Turn (หมายเลข, คิว, ยาม)",tips:"ข้าว(采)+นา(田) = เฝ้านา Watch over field = guard/number",compounds:["一番 (いちばん - number one/อันดับหนึ่ง)", "番号 (ばんごう - number/หมายเลข)", "番組 (ばんぐみ - TV program/รายการ)"],tags:["number","turn","หมายเลข"],level:"N4"},
+  {kanji:"文",reading:"ブン/もん",meaning:"Sentence, Culture (ประโยค, วัฒนธรรม)",tips:"รูปคนมีลายสัก = อักษร Person with tattoo = written character",compounds:["文化 (ぶんか - culture/วัฒนธรรม)", "作文 (さくぶん - essay/เรียงความ)", "文章 (ぶんしょう - writing/ข้อความ)", "文字 (もじ - letter/ตัวอักษร)"],tags:["sentence","culture","writing","วัฒนธรรม"],level:"N4"},
+  {kanji:"方",reading:"ホウ/かた",meaning:"Direction, Way (ทิศทาง, วิธี)",tips:"หางไถ = ทิศทาง Plow handle = direction",compounds:["方向 (ほうこう - direction/ทิศทาง)", "方法 (ほうほう - method/วิธีการ)", "地方 (ちほう - region/ภูมิภาค)", "あの方 (あのかた - that person/ท่าน)"],tags:["direction","method","way","ทิศทาง","วิธี"],level:"N4"},
+  {kanji:"薬",reading:"ヤク/くすり",meaning:"Medicine, Drug (ยา)",tips:"草(พืช)+楽(สบาย) = พืชสมุนไพรทำให้หาย Plant+relief = healing herb",compounds:["薬 (くすり - medicine/ยา)", "薬局 (やっきょく - pharmacy/ร้านขายยา)", "薬品 (やくひん - chemical/สารเคมี)"],tags:["medicine","drug","ยา"],level:"N4"},
+  {kanji:"有",reading:"ユウ/あ(る)",meaning:"Exist, Have (มี, มีอยู่)",tips:"มือ(ナ)+เนื้อ(月) = มือถือเนื้อ = มี Hand+meat = have in hand",compounds:["有名 (ゆうめい - famous/มีชื่อเสียง)", "有る (ある - to exist/มี)", "有効 (ゆうこう - valid/มีผล)"],tags:["exist","have","มี"],level:"N4"},
+  {kanji:"洋",reading:"ヨウ",meaning:"Western, Ocean (ตะวันตก, มหาสมุทร)",tips:"น้ำ(氵)+ยิ่งใหญ่(羊) = ทะเลกว้าง Water+vast = ocean",compounds:["洋食 (ようしょく - Western food/อาหารตะวันตก)", "洋服 (ようふく - Western clothes/เสื้อผ้า)", "太平洋 (たいへいよう - Pacific/มหาสมุทรแปซิฟิก)"],tags:["western","ocean","ตะวันตก"],level:"N4"},
+  {kanji:"理",reading:"リ",meaning:"Reason, Logic (เหตุผล, ตรรกะ)",tips:"อัญมณี(玉)+หมู่บ้าน(里) = ความเป็นระเบียบ Gem+village = orderly principle",compounds:["理由 (りゆう - reason/เหตุผล)", "料理 (りょうり - cooking/การปรุงอาหาร)", "理解 (りかい - understanding/เข้าใจ)", "管理 (かんり - management/จัดการ)"],tags:["reason","logic","cooking","เหตุผล"],level:"N4"},
+  {kanji:"旅",reading:"リョ/たび",meaning:"Travel, Journey (การเดินทาง)",tips:"ธง+คนสองคน = นักเดินทาง Flag+people = travelers",compounds:["旅行 (りょこう - travel/การเดินทาง)", "旅館 (りょかん - inn/โรงแรมสไตล์ญี่ปุ่น)", "旅人 (たびびと - traveler/นักเดินทาง)"],tags:["travel","journey","การเดินทาง"],level:"N4"},
+  {kanji:"料",reading:"リョウ",meaning:"Fee, Material (ค่า, วัตถุดิบ)",tips:"ข้าว(米)+วัด(斗) = ตวงข้าว Measure+rice = measure material",compounds:["料金 (りょうきん - fee/ค่าธรรมเนียม)", "料理 (りょうり - cooking/การปรุงอาหาร)", "材料 (ざいりょう - ingredient/วัตถุดิบ)", "無料 (むりょう - free/ฟรี)"],tags:["fee","material","cooking","ค่า"],level:"N4"},
+  {kanji:"歌",reading:"カ/うた",meaning:"Song, Sing (เพลง, ร้องเพลง)",tips:"ปากเปิด(欠)+อักษร(哥) = ร้องเพลง Open mouth+words = sing",compounds:["歌う (うたう - to sing/ร้องเพลง)", "歌手 (かしゅ - singer/นักร้อง)", "国歌 (こっか - national anthem/เพลงชาติ)"],tags:["song","sing","music","เพลง"],level:"N4"},
+  {kanji:"顔",reading:"ガン/かお",meaning:"Face (ใบหน้า)",tips:"ดาว(彦)+หัว(頁) = ใบหน้าสวยงาม Elegant+head = beautiful face",compounds:["顔 (かお - face/ใบหน้า)", "顔色 (かおいろ - complexion/สีหน้า)", "笑顔 (えがお - smile/รอยยิ้ม)"],tags:["face","ใบหน้า","body"],level:"N4"},
+  {kanji:"感",reading:"カン",meaning:"Feel, Sense (ความรู้สึก)",tips:"ทั้งหมด(咸)+ใจ(心) = รับรู้ทุกอย่าง All+heart = sense everything",compounds:["感じ (かんじ - feeling/ความรู้สึก)", "感謝 (かんしゃ - gratitude/ขอบคุณ)", "感動 (かんどう - moved/ซาบซึ้ง)", "感情 (かんじょう - emotion/อารมณ์)"],tags:["feel","sense","emotion","ความรู้สึก"],level:"N4"},
+  {kanji:"近",reading:"キン/ちか(い)",meaning:"Near, Close (ใกล้)",tips:"เดิน(辶)+ขวาน(斤) = ตัดทางสั้น Walk+axe = shortcut = near",compounds:["近い (ちかい - near/ใกล้)", "近所 (きんじょ - neighborhood/ละแวกบ้าน)", "最近 (さいきん - recently/เร็วๆ นี้)"],tags:["near","close","ใกล้"],level:"N4"},
+  {kanji:"絵",reading:"カイ/え",meaning:"Picture, Drawing (ภาพวาด)",tips:"ด้าย(糸)+สี(会) = ผ้าวาดสี Thread+color = colorful cloth = picture",compounds:["絵 (え - picture/ภาพ)", "絵本 (えほん - picture book/หนังสือภาพ)", "絵画 (かいが - painting/จิตรกรรม)"],tags:["picture","drawing","ภาพ"],level:"N4"},
+  {kanji:"英",reading:"エイ",meaning:"English, Hero (ภาษาอังกฤษ, วีรบุรุษ)",tips:"草(พืช)+中央(央) = พืชเจริญ Plant flourishing = hero/great",compounds:["英語 (えいご - English/ภาษาอังกฤษ)", "英雄 (えいゆう - hero/วีรบุรุษ)", "英国 (えいこく - England/อังกฤษ)"],tags:["english","hero","ภาษาอังกฤษ"],level:"N4"},
+  {kanji:"業",reading:"ギョウ/わざ",meaning:"Work, Profession (อาชีพ, งาน)",tips:"ระฆัง+ไม้ = งานดนตรี = อาชีพ Bell+wood = musical work = vocation",compounds:["工業 (こうぎょう - industry/อุตสาหกรรม)", "職業 (しょくぎょう - occupation/อาชีพ)", "授業 (じゅぎょう - class/ชั้นเรียน)", "農業 (のうぎょう - agriculture/เกษตรกรรม)"],tags:["work","profession","อาชีพ"],level:"N4"},
+  {kanji:"活",reading:"カツ",meaning:"Activity, Live (กิจกรรม, ดำรงชีวิต)",tips:"น้ำ(氵)+ลิ้น(舌) = น้ำพุ่ง = ชีวิตดำเนิน Water+tongue = spring = active life",compounds:["活動 (かつどう - activity/กิจกรรม)", "生活 (せいかつ - life/ชีวิตประจำวัน)", "活用 (かつよう - practical use/การใช้งาน)"],tags:["activity","live","กิจกรรม"],level:"N4"},
+  {kanji:"服",reading:"フク",meaning:"Clothes (เสื้อผ้า)",tips:"เรือ(月)+ยอมจำนน = สวมใส่ Boat+submit = put on",compounds:["洋服 (ようふく - Western clothes/เสื้อผ้า)", "制服 (せいふく - uniform/เครื่องแบบ)", "服装 (ふくそう - attire/การแต่งกาย)"],tags:["clothes","เสื้อผ้า"],level:"N4"},
+  {kanji:"部",reading:"ブ/へ",meaning:"Part, Club, Section (ส่วน, ชมรม)",tips:"บ้าน+เมือง(邑) = เขต Town+city = district/section",compounds:["部屋 (へや - room/ห้อง)", "部長 (ぶちょう - department head/หัวหน้าแผนก)", "全部 (ぜんぶ - all/ทั้งหมด)", "部活 (ぶかつ - club activity/ชมรม)"],tags:["part","section","club","ส่วน"],level:"N4"},
+  {kanji:"飯",reading:"ハン/めし",meaning:"Rice, Meal (ข้าว, มื้ออาหาร)",tips:"อาหาร(食)+กลับ(反) = หุงซ้ำ Cook+again = cook rice",compounds:["ご飯 (ごはん - rice/meal/ข้าว)", "朝飯 (あさめし - breakfast/อาหารเช้า)", "炊飯器 (すいはんき - rice cooker/หม้อหุงข้าว)"],tags:["rice","meal","food","ข้าว"],level:"N4"},
+  {kanji:"紙",reading:"シ/かみ",meaning:"Paper (กระดาษ)",tips:"ด้าย(糸)+ผลิต(氏) = กระดาษสาน Thread+produce = woven paper",compounds:["紙 (かみ - paper/กระดาษ)", "手紙 (てがみ - letter/จดหมาย)", "折り紙 (おりがみ - origami/การพับกระดาษ)"],tags:["paper","กระดาษ"],level:"N4"},
+  {kanji:"産",reading:"サン/う(む)",meaning:"Produce, Birth (ผลผลิต, คลอด)",tips:"ยืน(立)+岩(หิน)+生(เกิด) = เกิดจากแผ่นดิน Born from earth = produce",compounds:["産まれる (うまれる - to be born/เกิด)", "農産物 (のうさんぶつ - farm products/ผลผลิตเกษตร)", "土産 (みやげ - souvenir/ของฝาก)", "生産 (せいさん - production/การผลิต)"],tags:["produce","birth","ผลผลิต"],level:"N4"},
+  // --- N4: Remaining (completing to ~166) ---
+  {kanji:"愛",reading:"アイ",meaning:"Love (ความรัก)",tips:"心(จิตใจ)+受(รับ) = หัวใจที่รับรู้ความรัก Heart that receives love",compounds:["愛する (あいする - to love/รัก)", "愛情 (あいじょう - affection/ความรัก)", "恋愛 (れんあい - romance/ความรักแบบคู่รัก)", "愛知 (あいち - Aichi/จังหวัดไอจิ)"],tags:["love","ความรัก"],level:"N4"},
+  {kanji:"暗",reading:"アン/くら(い)",meaning:"Dark (มืด)",tips:"日(แดด)+音(เสียง) = วันที่ไม่มีแสง No sunlight = dark",compounds:["暗い (くらい - dark/มืด)", "暗記 (あんき - memorize/ท่องจำ)", "暗号 (あんごう - code/รหัส)", "明暗 (めいあん - light and dark/แสงเงา)"],tags:["dark","มืด"],level:"N4"},
+  {kanji:"以",reading:"イ",meaning:"By means of, Since (โดย, ตั้งแต่)",tips:"คนยืนตรง = ใช้สิ่งนี้เป็นเกณฑ์ Using as standard",compounds:["以上 (いじょう - above/ข้างต้นนี้)", "以下 (いか - below/ต่ำกว่า)", "以前 (いぜん - before/ก่อนหน้า)", "以外 (いがい - except/นอกจาก)"],tags:["by means of","since","โดย"],level:"N4"},
+  {kanji:"員",reading:"イン",meaning:"Member, Staff (สมาชิก, พนักงาน)",tips:"口(ปาก)+貝(เงิน) = คนจ่ายค่าสมาชิก Member who contributes",compounds:["社員 (しゃいん - employee/พนักงาน)", "店員 (てんいん - store clerk/พนักงานร้าน)", "会員 (かいいん - member/สมาชิก)", "全員 (ぜんいん - everyone/ทุกคน)"],tags:["member","staff","สมาชิก","พนักงาน"],level:"N4"},
+  {kanji:"院",reading:"イン",meaning:"Institution, Hospital (สถาบัน, โรงพยาบาล)",tips:"阜(เนิน)+完(สมบูรณ์) = อาคารสถาบันใหญ่ Large institution",compounds:["病院 (びょういん - hospital/โรงพยาบาล)", "大学院 (だいがくいん - grad school/บัณฑิตวิทยาลัย)", "入院 (にゅういん - hospitalized/นอนโรงพยาบาล)", "美容院 (びよういん - beauty salon/ร้านเสริมสวย)"],tags:["institution","hospital","สถาบัน","โรงพยาบาล"],level:"N4"},
+  {kanji:"化",reading:"カ/ば(ける)",meaning:"Change, Transform (เปลี่ยนแปลง)",tips:"人(คน)+匕(คนกลับหัว) = คนแปลงร่าง Person transforming",compounds:["文化 (ぶんか - culture/วัฒนธรรม)", "化学 (かがく - chemistry/เคมี)", "変化 (へんか - change/การเปลี่ยนแปลง)", "進化 (しんか - evolution/วิวัฒนาการ)"],tags:["change","transform","เปลี่ยนแปลง"],level:"N4"},
+  {kanji:"画",reading:"ガ/カク",meaning:"Picture, Film, Stroke (ภาพ, เส้น)",tips:"田(นา)+一 = วาดเส้นบนกระดาษ Drawing lines on paper",compounds:["映画 (えいが - movie/ภาพยนตร์)", "漫画 (まんが - manga/การ์ตูน)", "計画 (けいかく - plan/แผน)", "画家 (がか - painter/จิตรกร)"],tags:["picture","film","ภาพ"],level:"N4"},
+  {kanji:"解",reading:"カイ/と(く)",meaning:"Solve, Understand (แก้ปัญหา, เข้าใจ)",tips:"角(เขา)+刀(มีด)+牛(วัว) = ชำแหละเนื้อ = แยกแยะ Breaking apart = understand",compounds:["解る (わかる - understand/เข้าใจ)", "解決 (かいけつ - solution/การแก้ปัญหา)", "解説 (かいせつ - explanation/คำอธิบาย)", "理解 (りかい - comprehension/ความเข้าใจ)"],tags:["solve","understand","แก้ปัญหา"],level:"N4"},
+  {kanji:"楽",reading:"ガク/たの(しい)/らく",meaning:"Fun, Music, Comfort (สนุก, ดนตรี, สบาย)",tips:"木(ไม้)+白+幺 = เครื่องดนตรีไม้ทำให้สุขใจ Wood instrument = joy",compounds:["楽しい (たのしい - fun/สนุก)", "音楽 (おんがく - music/ดนตรี)", "楽器 (がっき - instrument/เครื่องดนตรี)", "気楽 (きらく - carefree/สบายใจ)"],tags:["fun","music","สนุก","ดนตรี"],level:"N4"},
+  {kanji:"漢",reading:"カン",meaning:"Chinese character (อักษรจีน, คันจิ)",tips:"氵(น้ำ)+堇 = แม่น้ำฮั่นในจีน Han river = Chinese",compounds:["漢字 (かんじ - kanji/ตัวอักษรคันจิ)", "漢文 (かんぶん - Chinese text/ภาษาจีนโบราณ)", "漢方 (かんぽう - Chinese medicine/แพทย์แผนจีน)"],tags:["kanji","Chinese","คันจิ"],level:"N4"},
+  {kanji:"館",reading:"カン/やかた",meaning:"Hall, Building (อาคาร, หอ)",tips:"食(อาหาร)+官(ราชการ) = อาคารรับรองอย่างเป็นทางการ Official reception hall",compounds:["図書館 (としょかん - library/ห้องสมุด)", "旅館 (りょかん - Japanese inn/โรงแรมญี่ปุ่น)", "博物館 (はくぶつかん - museum/พิพิธภัณฑ์)", "映画館 (えいがかん - cinema/โรงหนัง)"],tags:["building","hall","อาคาร"],level:"N4"},
+  {kanji:"教",reading:"キョウ/おし(える)",meaning:"Teach (สอน)",tips:"孝(กตัญญู)+攴(เคาะ) = ครูสอนนักเรียน Teacher instructs",compounds:["教える (おしえる - to teach/สอน)", "教室 (きょうしつ - classroom/ห้องเรียน)", "教育 (きょういく - education/การศึกษา)", "教師 (きょうし - teacher/ครู)"],tags:["teach","education","สอน","การศึกษา"],level:"N4"},
+  {kanji:"強",reading:"キョウ/つよ(い)",meaning:"Strong (แข็งแกร่ง)",tips:"弓(ธนู)+虫 = แมลงที่แข็งแกร่งเหมือนธนู Strong as a bowstring",compounds:["強い (つよい - strong/แข็งแกร่ง)", "勉強 (べんきょう - study/เรียนหนังสือ)", "強調 (きょうちょう - emphasis/การเน้น)", "強力 (きょうりょく - powerful/ทรงพลัง)"],tags:["strong","แข็งแกร่ง"],level:"N4"},
+  {kanji:"計",reading:"ケイ/はか(る)",meaning:"Measure, Plan (วัด, แผน)",tips:"言(พูด)+十(สิบ) = นับจนถึงสิบ Count up to ten = measure",compounds:["計画 (けいかく - plan/แผน)", "時計 (とけい - clock/นาฬิกา)", "合計 (ごうけい - total/รวมทั้งหมด)", "計算 (けいさん - calculation/การคำนวณ)"],tags:["measure","plan","วัด","แผน"],level:"N4"},
+  {kanji:"古",reading:"コ/ふる(い)",meaning:"Old, Ancient (เก่า, โบราณ)",tips:"十(สิบ)+口(ปาก) = เล่าเรื่องมาสิบชั่วคน 10 generations of stories = old",compounds:["古い (ふるい - old/เก่า)", "古典 (こてん - classic/คลาสสิก)", "中古 (ちゅうこ - secondhand/มือสอง)", "古代 (こだい - ancient/สมัยโบราณ)"],tags:["old","ancient","เก่า","โบราณ"],level:"N4"},
+  {kanji:"合",reading:"ゴウ/あ(う)",meaning:"Combine, Fit, Match (รวม, เข้ากัน)",tips:"亼(รวม)+口(ปาก) = ปากพูดพร้อมกัน Voices together = combine",compounds:["合う (あう - to fit/เข้ากัน)", "合格 (ごうかく - pass exam/สอบผ่าน)", "場合 (ばあい - case/ในกรณี)", "都合 (つごう - convenience/ความสะดวก)"],tags:["combine","fit","รวม","เข้ากัน"],level:"N4"},
+  {kanji:"細",reading:"サイ/ほそ(い)",meaning:"Thin, Detailed (บาง, ละเอียด)",tips:"糸(ด้าย)+田(นา) = ด้ายบางเส้น Thread thin as a line",compounds:["細い (ほそい - thin/บาง)", "細かい (こまかい - detailed/ละเอียด)", "詳細 (しょうさい - details/รายละเอียด)", "細胞 (さいぼう - cell/เซลล์)"],tags:["thin","detailed","บาง","ละเอียด"],level:"N4"},
+  {kanji:"者",reading:"シャ/もの",meaning:"Person, Expert (บุคคล, ผู้เชี่ยวชาญ)",tips:"老(แก่)+日(แสง) = ผู้มีประสบการณ์มาก Experienced elder",compounds:["医者 (いしゃ - doctor/หมอ)", "記者 (きしゃ - journalist/นักข่าว)", "学者 (がくしゃ - scholar/นักวิชาการ)", "若者 (わかもの - young person/คนหนุ่มสาว)"],tags:["person","expert","บุคคล","ผู้เชี่ยวชาญ"],level:"N4"},
+  {kanji:"借",reading:"シャク/か(りる)",meaning:"Borrow (ยืม)",tips:"人(คน)+昔(อดีต) = ยืมของคนอื่น Take from others temporarily",compounds:["借りる (かりる - to borrow/ยืม)", "借金 (しゃっきん - debt/หนี้สิน)", "貸し借り (かしかり - lending/การให้ยืม)", "賃借 (ちんしゃく - rental/การเช่า)"],tags:["borrow","ยืม"],level:"N4"},
+  {kanji:"終",reading:"シュウ/お(わる)",meaning:"End, Finish (สิ้นสุด, จบ)",tips:"糸(ด้าย)+冬(ฤดูหนาว) = ด้ายหมดเมื่อหนาว Thread ends in winter = finish",compounds:["終わる (おわる - to end/สิ้นสุด)", "終電 (しゅうでん - last train/รถไฟขบวนสุดท้าย)", "最終 (さいしゅう - final/สุดท้าย)", "終了 (しゅうりょう - completion/เสร็จสิ้น)"],tags:["end","finish","สิ้นสุด","จบ"],level:"N4"},
+  {kanji:"習",reading:"シュウ/なら(う)",meaning:"Learn, Practice (เรียนรู้, ฝึก)",tips:"羽(ปีก)+白(ขาว) = ลูกนกหัดบิน Chick learning to fly = practice",compounds:["習う (ならう - to learn/เรียน)", "学習 (がくしゅう - learning/การเรียนรู้)", "習慣 (しゅうかん - habit/นิสัย)", "練習 (れんしゅう - practice/การฝึกซ้อม)"],tags:["learn","practice","เรียนรู้","ฝึก"],level:"N4"},
+  {kanji:"重",reading:"ジュウ/おも(い)",meaning:"Heavy, Important (หนัก, สำคัญ)",tips:"千(พัน)+里(ลี้)+土 = น้ำหนักมหาศาล Enormous weight",compounds:["重い (おもい - heavy/หนัก)", "重要 (じゅうよう - important/สำคัญ)", "体重 (たいじゅう - body weight/น้ำหนักตัว)", "二重 (にじゅう - double/สองชั้น)"],tags:["heavy","important","หนัก","สำคัญ"],level:"N4"},
+  {kanji:"集",reading:"シュウ/あつ(まる)",meaning:"Gather, Collect (รวมกัน, สะสม)",tips:"隹(นก)+木(ต้นไม้) = นกรวมกันบนต้นไม้ Birds gathering on tree",compounds:["集まる (あつまる - to gather/รวมกัน)", "集中 (しゅうちゅう - concentrate/มุ่งความสนใจ)", "集合 (しゅうごう - assembly/การรวมตัว)", "文集 (ぶんしゅう - anthology/รวมเล่ม)"],tags:["gather","collect","รวมกัน","สะสม"],level:"N4"},
+  {kanji:"住",reading:"ジュウ/す(む)",meaning:"Live, Reside (อาศัย, พักอยู่)",tips:"人(คน)+主(หลัก) = คนอยู่ที่หลักปักฐาน Person settled at main place",compounds:["住む (すむ - to live/อาศัยอยู่)", "住所 (じゅうしょ - address/ที่อยู่)", "住民 (じゅうみん - resident/ผู้อยู่อาศัย)", "在住 (ざいじゅう - residing in/อาศัยอยู่ใน)"],tags:["live","reside","อาศัย"],level:"N4"},
+  {kanji:"進",reading:"シン/すす(む)",meaning:"Advance, Progress (ก้าวหน้า, เดินหน้า)",tips:"隹(นก)+辶(เดิน) = นกเดินไปข้างหน้า Bird moving forward",compounds:["進む (すすむ - to advance/ก้าวไปข้างหน้า)", "進歩 (しんぽ - progress/ความก้าวหน้า)", "前進 (ぜんしん - forward/เดินหน้า)", "進化 (しんか - evolution/วิวัฒนาการ)"],tags:["advance","progress","ก้าวหน้า"],level:"N4"},
+  {kanji:"数",reading:"スウ/かず",meaning:"Number, Count (จำนวน, นับ)",tips:"婁(หลายชั้น)+攴(เคาะ) = นับซ้ำๆ Count repeatedly",compounds:["数字 (すうじ - numeral/ตัวเลข)", "数学 (すうがく - mathematics/คณิตศาสตร์)", "回数 (かいすう - frequency/จำนวนครั้ง)", "多数 (たすう - many/จำนวนมาก)"],tags:["number","count","จำนวน"],level:"N4"},
+  {kanji:"制",reading:"セイ",meaning:"Control, System (ควบคุม, ระบบ)",tips:"牛(วัว)+刀(มีด)+一 = ควบคุมด้วยกฎระเบียบ Control with rules",compounds:["制度 (せいど - system/ระบบ)", "規制 (きせい - regulation/ข้อบังคับ)", "制服 (せいふく - uniform/เครื่องแบบ)", "強制 (きょうせい - coercion/การบังคับ)"],tags:["control","system","ควบคุม","ระบบ"],level:"N4"},
+  {kanji:"星",reading:"セイ/ほし",meaning:"Star (ดาว)",tips:"日(ดวงอาทิตย์)+生(เกิด) = ดาวเกิดจากแสง Born from light = star",compounds:["星 (ほし - star/ดาว)", "星座 (せいざ - constellation/กลุ่มดาว)", "流れ星 (ながれぼし - shooting star/ดาวตก)", "衛星 (えいせい - satellite/ดาวเทียม)"],tags:["star","ดาว"],level:"N4"},
+  {kanji:"声",reading:"セイ/こえ",meaning:"Voice (เสียง)",tips:"士(นักรบ)+口(ปาก) = เสียงตะโกนของนักรบ Warrior's shout",compounds:["声 (こえ - voice/เสียง)", "大声 (おおごえ - loud voice/เสียงดัง)", "声優 (せいゆう - voice actor/นักพากย์)", "音声 (おんせい - audio/เสียง)"],tags:["voice","เสียง"],level:"N4"},
+  {kanji:"洗",reading:"セン/あら(う)",meaning:"Wash (ล้าง)",tips:"氵(น้ำ)+先(ก่อน) = ล้างน้ำก่อนเสมอ Water first = wash",compounds:["洗う (あらう - to wash/ล้าง)", "洗面所 (せんめんじょ - washroom/ห้องน้ำ)", "洗濯 (せんたく - laundry/การซักผ้า)", "洗剤 (せんざい - detergent/น้ำยาล้าง)"],tags:["wash","ล้าง"],level:"N4"},
+  {kanji:"全",reading:"ゼン/すべ(て)",meaning:"All, Complete (ทั้งหมด, สมบูรณ์)",tips:"人(คน)+王(กษัตริย์) = กษัตริย์ปกครองทุกคน King over all people",compounds:["全部 (ぜんぶ - all/ทั้งหมด)", "全員 (ぜんいん - everyone/ทุกคน)", "全国 (ぜんこく - nationwide/ทั่วประเทศ)", "安全 (あんぜん - safety/ความปลอดภัย)"],tags:["all","complete","ทั้งหมด","สมบูรณ์"],level:"N4"},
+  {kanji:"村",reading:"ソン/むら",meaning:"Village (หมู่บ้าน)",tips:"木(ต้นไม้)+寸(นิ้ว) = หมู่บ้านเล็กในป่า Small forest settlement",compounds:["村 (むら - village/หมู่บ้าน)", "農村 (のうそん - farming village/หมู่บ้านเกษตร)", "村人 (むらびと - villager/ชาวบ้าน)", "村長 (むらちょう - village head/ผู้ใหญ่บ้าน)"],tags:["village","หมู่บ้าน","rural"],level:"N4"},
+  {kanji:"太",reading:"タイ/ふと(い)",meaning:"Fat, Thick, Big (อ้วน, หนา, ใหญ่)",tips:"大(ใหญ่)+点 = ใหญ่กว่าปกติ Larger than normal = thick/fat",compounds:["太い (ふとい - thick/หนา)", "太陽 (たいよう - sun/ดวงอาทิตย์)", "太平洋 (たいへいよう - Pacific Ocean/มหาสมุทรแปซิฟิก)", "丸太 (まるた - log/ท่อนไม้)"],tags:["fat","thick","big","อ้วน","หนา"],level:"N4"},
+  {kanji:"題",reading:"ダイ",meaning:"Topic, Title, Problem (หัวข้อ, ชื่อเรื่อง)",tips:"是(ถูกต้อง)+頁(หน้า) = หน้าหัวข้อ Topic on a page",compounds:["問題 (もんだい - problem/ปัญหา)", "題名 (だいめい - title/ชื่อเรื่อง)", "課題 (かだい - assignment/การบ้าน)", "話題 (わだい - topic/หัวข้อสนทนา)"],tags:["topic","title","problem","หัวข้อ","ปัญหา"],level:"N4"},
+  {kanji:"注",reading:"チュウ/そそ(ぐ)",meaning:"Pour, Attention, Note (เท, ใส่ใจ)",tips:"氵(น้ำ)+主(หลัก) = เทน้ำลงจุดกลาง Pour water to center",compounds:["注意 (ちゅうい - attention/ความระวัง)", "注文 (ちゅうもん - order/การสั่ง)", "注射 (ちゅうしゃ - injection/การฉีดยา)", "注目 (ちゅうもく - attention/การจับตา)"],tags:["pour","attention","เท","ใส่ใจ"],level:"N4"},
+  {kanji:"転",reading:"テン/ころ(ぶ)",meaning:"Roll, Transfer, Fall (หมุน, โอน, ล้ม)",tips:"車(รถ)+専(เฉพาะ) = รถที่หมุน Car rolling = turn",compounds:["転ぶ (ころぶ - to fall/ล้ม)", "運転 (うんてん - driving/การขับรถ)", "転職 (てんしょく - job change/เปลี่ยนงาน)", "転校 (てんこう - transfer school/ย้ายโรงเรียน)"],tags:["roll","transfer","fall","หมุน","โอน"],level:"N4"},
+  {kanji:"都",reading:"ト/みやこ",meaning:"Capital, City (เมืองหลวง, นครหลวง)",tips:"者(คน)+邑(เมือง) = เมืองที่คนมากมาย City of many people",compounds:["東京都 (とうきょうと - Tokyo Metropolis/โตเกียวเมโทร)", "都市 (とし - city/เมือง)", "都合 (つごう - convenience/ความสะดวก)", "首都 (しゅと - capital/เมืองหลวง)"],tags:["capital","city","เมืองหลวง"],level:"N4"},
+  {kanji:"度",reading:"ド/たび",meaning:"Degree, Time (ครั้ง, องศา)",tips:"广(บ้าน)+廿(20)+又(มือ) = วัดซ้ำหลายครั้ง Measuring repeatedly",compounds:["今度 (こんど - this time/ครั้งนี้)", "温度 (おんど - temperature/อุณหภูมิ)", "態度 (たいど - attitude/ท่าที)", "制度 (せいど - system/ระบบ)"],tags:["degree","time","ครั้ง","องศา"],level:"N4"},
+  {kanji:"発",reading:"ハツ/た(つ)",meaning:"Depart, Emit, Start (ออกเดินทาง, ปล่อย)",tips:"癶(เท้า)+弓(ธนู) = ยิงธนูออกไป Shoot arrow = emit/start",compounds:["出発 (しゅっぱつ - departure/การออกเดินทาง)", "発表 (はっぴょう - announcement/การประกาศ)", "発展 (はってん - development/การพัฒนา)", "発見 (はっけん - discovery/การค้นพบ)"],tags:["depart","emit","start","ออกเดินทาง"],level:"N4"},
+  {kanji:"品",reading:"ヒン/しな",meaning:"Goods, Quality, Item (สินค้า, คุณภาพ)",tips:"口(ปาก)สามอัน = สินค้าหลายชนิด Three mouths = many items",compounds:["品物 (しなもの - goods/สินค้า)", "作品 (さくひん - work/ผลงาน)", "商品 (しょうひん - merchandise/สินค้า)", "品質 (ひんしつ - quality/คุณภาพ)"],tags:["goods","quality","สินค้า","คุณภาพ"],level:"N4"},
+  {kanji:"不",reading:"フ/ブ",meaning:"Negative prefix, Not- (คำปฏิเสธ, ไม่-)",tips:"鳥(นก)บินขึ้น = ถึงไม่ได้ Cannot reach = not/un-",compounds:["不安 (ふあん - anxiety/ความกังวล)", "不思議 (ふしぎ - mysterious/น่าแปลกใจ)", "不便 (ふべん - inconvenient/ไม่สะดวก)", "不満 (ふまん - dissatisfied/ไม่พอใจ)"],tags:["not","negative","ไม่-"],level:"N4"},
+  {kanji:"別",reading:"ベツ/わか(れる)",meaning:"Separate, Different (แยก, ต่างกัน)",tips:"另(อีก)+刀(มีด) = ตัดแยกออก Cut and separate",compounds:["別れる (わかれる - to part/แยกจากกัน)", "特別 (とくべつ - special/พิเศษ)", "区別 (くべつ - distinction/การแยกแยะ)", "別に (べつに - not especially/ไม่เป็นไร)"],tags:["separate","different","แยก","ต่างกัน"],level:"N4"},
+  {kanji:"変",reading:"ヘン/か(わる)",meaning:"Change, Strange (เปลี่ยน, แปลก)",tips:"言(พูด)+攴(เคาะ) = พลิกผัน Twisting = change/strange",compounds:["変わる (かわる - to change/เปลี่ยน)", "変化 (へんか - change/การเปลี่ยนแปลง)", "大変 (たいへん - difficult/ลำบาก)", "変な (へんな - strange/แปลก)"],tags:["change","strange","เปลี่ยน","แปลก"],level:"N4"},
+  {kanji:"勉",reading:"ベン",meaning:"Diligent, Study (ขยัน, ตั้งใจ)",tips:"力(กำลัง)+免(หลีกเลี่ยง) = พยายามเอาชนะ Force to overcome = strive",compounds:["勉強 (べんきょう - study/การเรียน)", "勉強する (べんきょうする - to study/เรียนหนังสือ)", "勉強家 (べんきょうか - studious person/คนขยัน)"],tags:["study","diligent","เรียน","ขยัน"],level:"N4"},
+  {kanji:"便",reading:"ベン/たよ(り)",meaning:"Convenient, Mail (สะดวก, ไปรษณีย์)",tips:"人(คน)+更(เปลี่ยน) = คนส่งข่าว Person delivering messages",compounds:["便利 (べんり - convenient/สะดวก)", "不便 (ふべん - inconvenient/ไม่สะดวก)", "郵便 (ゆうびん - mail/ไปรษณีย์)", "便秘 (べんぴ - constipation/ท้องผูก)"],tags:["convenient","mail","สะดวก","ไปรษณีย์"],level:"N4"},
+  {kanji:"暮",reading:"ボ/く(らす)",meaning:"Evening, Live (พลบค่ำ, ดำรงชีวิต)",tips:"日(ดวงอาทิตย์)+草(หญ้า) = ดวงอาทิตย์ตกในทุ่ง Sun sets in field",compounds:["暮らす (くらす - to live/ดำรงชีวิต)", "夕暮れ (ゆうぐれ - twilight/ยามพลบค่ำ)", "暮れ (くれ - dusk/ค่ำ)", "年暮れ (としくれ - year's end/สิ้นปี)"],tags:["evening","live","พลบค่ำ","ดำรงชีวิต"],level:"N4"},
+  {kanji:"未",reading:"ミ",meaning:"Not yet, Future (ยังไม่, อนาคต)",tips:"木(ต้นไม้)+一(บน) = กิ่งบนยังไม่แตก Top branch not yet grown",compounds:["未来 (みらい - future/อนาคต)", "未定 (みてい - undecided/ยังไม่ตัดสินใจ)", "未知 (みち - unknown/สิ่งที่ไม่รู้)", "未成年 (みせいねん - minor/ผู้เยาว์)"],tags:["not yet","future","ยังไม่","อนาคต"],level:"N4"},
+  {kanji:"様",reading:"ヨウ/さま",meaning:"Manner, Mr./Mrs. (ลักษณะ, คุณ-)",tips:"木(ไม้)+羊(แกะ)+水 = รูปลักษณ์งดงาม Beautiful form",compounds:["様子 (ようす - situation/สถานการณ์)", "お客様 (おきゃくさま - customer/ลูกค้า)", "同様 (どうよう - same/เช่นเดียวกัน)", "様々 (さまざま - various/หลากหลาย)"],tags:["manner","Mr.Mrs.","ลักษณะ"],level:"N4"},
+  {kanji:"翌",reading:"ヨク",meaning:"Next, Following (วันถัดไป, รุ่งขึ้น)",tips:"羽(ปีก)+立(ยืน) = ปีกกางออกวันถัดไป Wings spread next day",compounds:["翌日 (よくじつ - next day/วันถัดไป)", "翌朝 (よくあさ - next morning/เช้าวันถัดไป)", "翌週 (よくしゅう - next week/สัปดาห์ถัดไป)"],tags:["next","following","วันถัดไป"],level:"N4"},
+  {kanji:"練",reading:"レン/ね(る)",meaning:"Practice, Train (ฝึกซ้อม, ฝึกฝน)",tips:"糸(ด้าย)+東(ตะวันออก) = บิดด้ายซ้ำๆ Twisting thread repeatedly = practice",compounds:["練習 (れんしゅう - practice/การฝึกซ้อม)", "訓練 (くんれん - training/การฝึก)", "熟練 (じゅくれん - skilled/ชำนาญ)", "練り直す (ねりなおす - rework/ทำใหม่)"],tags:["practice","train","ฝึกซ้อม"],level:"N4"},
+  {kanji:"列",reading:"レツ",meaning:"Row, Line (แถว, แนว)",tips:"歹(กระดูก)+刀(มีด) = เรียงเป็นแถว Arranged bones = line",compounds:["列車 (れっしゃ - train/รถไฟ)", "行列 (ぎょうれつ - queue/คิว)", "列島 (れっとう - island chain/หมู่เกาะ)", "整列 (せいれつ - line up/เข้าแถว)"],tags:["row","line","แถว"],level:"N4"},
+  {kanji:"礼",reading:"レイ",meaning:"Gratitude, Bow, Courtesy (ความกตัญญู, คารวะ)",tips:"示(แสดง)+乙 = แสดงความเคารพ Show respect",compounds:["礼儀 (れいぎ - manners/มารยาท)", "失礼 (しつれい - excuse me/ขอโทษ)", "お礼 (おれい - thanks/ขอบคุณ)", "敬礼 (けいれい - salute/การคำนับ)"],tags:["gratitude","courtesy","ความกตัญญู","คารวะ"],level:"N4"},
+  {kanji:"和",reading:"ワ/なご(む)",meaning:"Harmony, Japan, Peace (ความสมานฉันท์, ญี่ปุ่น)",tips:"禾(ข้าว)+口(ปาก) = ทานข้าวด้วยกัน = สมานฉันท์ Eating together = harmony",compounds:["和食 (わしょく - Japanese food/อาหารญี่ปุ่น)", "平和 (へいわ - peace/สันติภาพ)", "和室 (わしつ - Japanese room/ห้องแบบญี่ปุ่น)", "調和 (ちょうわ - harmony/ความกลมกลืน)"],tags:["harmony","Japan","peace","ความสมานฉันท์","สันติภาพ"],level:"N4"},
+  {kanji:"予",reading:"ヨ",meaning:"In advance, Beforehand (ล่วงหน้า, กำหนดไว้)",tips:"矛(หอก)+了(สิ้นสุด) = เตรียมไว้ล่วงหน้า Prepare beforehand",compounds:["予定 (よてい - schedule/กำหนดการ)", "予約 (よやく - reservation/จอง)", "予習 (よしゅう - preparation/เตรียมเรียน)", "天気予報 (てんきよほう - weather forecast/พยากรณ์อากาศ)"],tags:["in advance","beforehand","ล่วงหน้า"],level:"N4"},
+  {kanji:"用",reading:"ヨウ/もち(いる)",meaning:"Use, Business, Errand (ใช้, ธุระ)",tips:"桶(ถัง) = ใช้ถังนี้ Use this vessel",compounds:["用意 (ようい - preparation/การเตรียม)", "使用 (しよう - use/การใช้)", "用事 (ようじ - errand/ธุระ)", "利用 (りよう - utilize/การใช้ประโยชน์)"],tags:["use","business","errand","ใช้","ธุระ"],level:"N4"},
+  {kanji:"点",reading:"テン",meaning:"Point, Dot, Score (คะแนน, จุด)",tips:"占(ครอบครอง)+灬(ไฟ) = จุดไฟ Dot of fire = point",compounds:["点数 (てんすう - score/คะแนน)", "欠点 (けってん - flaw/จุดบกพร่อง)", "観点 (かんてん - viewpoint/มุมมอง)", "満点 (まんてん - perfect score/คะแนนเต็ม)"],tags:["point","dot","score","คะแนน","จุด"],level:"N4"},
+  {kanji:"他",reading:"タ/ほか",meaning:"Other, Another (อื่น, คนอื่น)",tips:"人(คน)+也(เป็น) = คนอื่น Another person",compounds:["他 (ほか - other/อื่น)", "他人 (たにん - others/คนอื่น)", "その他 (そのほか - and others/และอื่นๆ)", "互いに (たがいに - mutually/ซึ่งกันและกัน)"],tags:["other","another","อื่น","คนอื่น"],level:"N4"},
+  {kanji:"末",reading:"マツ/すえ",meaning:"End, Tip, Weekend (ปลาย, สิ้นสุด)",tips:"木(ต้นไม้)+一(บน) = ปลายกิ่งบน Top tip of tree branch",compounds:["週末 (しゅうまつ - weekend/วันหยุดสุดสัปดาห์)", "年末 (ねんまつ - year end/สิ้นปี)", "月末 (つきすえ - month end/สิ้นเดือน)", "末 (すえ - end/ปลาย)"],tags:["end","tip","weekend","ปลาย","สุดสัปดาห์"],level:"N4"},
+  {kanji:"引",reading:"イン/ひ(く)",meaning:"Pull, Attract, Discount (ดึง, ลด)",tips:"弓(ธนู)+| = ดึงสายธนู Pull bowstring",compounds:["引く (ひく - to pull/ดึง)", "引越し (ひっこし - moving/ย้ายบ้าน)", "割引 (わりびき - discount/ส่วนลด)", "引退 (いんたい - retirement/เกษียณ)"],tags:["pull","attract","discount","ดึง","ส่วนลด"],level:"N4"},
+  {kanji:"祭",reading:"サイ/まつ(り)",meaning:"Festival (เทศกาล, งานเฉลิมฉลอง)",tips:"肉(เนื้อ)+又(มือ)+示(แท่น) = บวงสรวงด้วยเนื้อ Meat offering = festival",compounds:["祭り (まつり - festival/เทศกาล)", "祭日 (さいじつ - holiday/วันหยุดราชการ)", "文化祭 (ぶんかさい - school festival/งานโรงเรียน)", "お祭り (おまつり - festival/งานเทศกาล)"],tags:["festival","เทศกาล"],level:"N4"},
+  {kanji:"祖",reading:"ソ",meaning:"Ancestor, Founder (บรรพบุรุษ)",tips:"示(บวงสรวง)+且(แท่น) = บวงสรวงบรรพบุรุษ Offering to ancestors",compounds:["祖父 (そふ - grandfather/ปู่)", "祖母 (そぼ - grandmother/ย่า/ยาย)", "祖先 (そせん - ancestor/บรรพบุรุษ)", "先祖 (せんぞ - ancestor/บรรพบุรุษ)"],tags:["ancestor","founder","บรรพบุรุษ","family"],level:"N4"},
+  {kanji:"相",reading:"ソウ/あい",meaning:"Mutual, Aspect, Minister (ซึ่งกันและกัน, รัฐมนตรี)",tips:"木(ต้นไม้)+目(ตา) = มองต้นไม้ = สังเกตซึ่งกันและกัน Look at each other",compounds:["相談 (そうだん - consult/ปรึกษา)", "相手 (あいて - partner/คู่สนทนา)", "首相 (しゅしょう - prime minister/นายกรัฐมนตรี)", "相互 (そうご - mutual/ซึ่งกันและกัน)"],tags:["mutual","minister","ซึ่งกันและกัน"],level:"N4"},
+  {kanji:"調",reading:"チョウ/しら(べる)",meaning:"Investigate, Tune, Condition (สืบสวน, ปรับ)",tips:"言(พูด)+周(รอบ) = ถามไปรอบๆ Ask around = investigate",compounds:["調べる (しらべる - investigate/สืบสวน)", "調子 (ちょうし - condition/สภาพ)", "調整 (ちょうせい - adjust/ปรับ)", "強調 (きょうちょう - emphasis/การเน้น)"],tags:["investigate","tune","สืบสวน","ปรับ"],level:"N4"},
+  {kanji:"特",reading:"トク",meaning:"Special, Particular (พิเศษ, เฉพาะ)",tips:"牛(วัว)+寺(วัด) = วัวพิเศษที่วัด Special temple cow",compounds:["特別 (とくべつ - special/พิเศษ)", "特に (とくに - especially/โดยเฉพาะ)", "特徴 (とくちょう - feature/ลักษณะเฉพาะ)", "特急 (とっきゅう - express/ด่วนพิเศษ)"],tags:["special","particular","พิเศษ","เฉพาะ"],level:"N4"},
+  {kanji:"普",reading:"フ",meaning:"Ordinary, Common, General (ธรรมดา, ทั่วไป)",tips:"並(เรียง)+日(วัน) = วันธรรมดาเรียงต่อกัน Ordinary days in a row",compounds:["普通 (ふつう - ordinary/ธรรมดา)", "普及 (ふきゅう - spread/การแพร่หลาย)", "普段 (ふだん - usually/ปกติ)", "普通電車 (ふつうでんしゃ - local train/รถไฟธรรมดา)"],tags:["ordinary","common","ธรรมดา","ทั่วไป"],level:"N4"},
+  {kanji:"要",reading:"ヨウ/い(る)",meaning:"Need, Important, Essential (ต้องการ, สำคัญ)",tips:"西(ตะวันตก)+女(หญิง) = สิ่งที่จำเป็น Essential thing",compounds:["必要 (ひつよう - necessary/จำเป็น)", "重要 (じゅうよう - important/สำคัญ)", "要る (いる - to need/ต้องการ)", "要点 (ようてん - main point/ประเด็นสำคัญ)"],tags:["need","important","essential","ต้องการ","สำคัญ"],level:"N4"},
+  // --- N3: Starter (20 kanji) ---
+  {kanji:"表",reading:"ヒョウ/おもて",meaning:"Surface, Express, Table (ผิวหน้า, แสดง, ตาราง)",tips:"衣(เสื้อ)+毛(ขน) = ผิวด้านนอกเสื้อ Outer surface of clothing",compounds:["表す (あらわす - to express/แสดงออก)", "発表 (はっぴょう - presentation/การนำเสนอ)", "表情 (ひょうじょう - expression/สีหน้า)", "時刻表 (じこくひょう - timetable/ตารางเวลา)"],tags:["surface","express","table","ผิวหน้า","แสดง"],level:"N3"},
+  {kanji:"裏",reading:"リ/うら",meaning:"Back, Inside, Reverse (ด้านหลัง, ด้านใน)",tips:"衣(เสื้อ)+里(หมู่บ้าน) = ด้านในของเสื้อ Inside of clothing",compounds:["裏 (うら - back/ด้านหลัง)", "裏口 (うらぐち - back door/ประตูหลัง)", "裏切る (うらぎる - betray/ทรยศ)", "表裏 (おもてうら - front and back/หน้าและหลัง)"],tags:["back","inside","reverse","ด้านหลัง"],level:"N3"},
+  {kanji:"勝",reading:"ショウ/か(つ)",meaning:"Win, Victory (ชนะ)",tips:"月(เนื้อ)+力(พลัง) = กำลังเนื้อหนังที่ชนะ Body strength wins",compounds:["勝つ (かつ - to win/ชนะ)", "勝負 (しょうぶ - match/การแข่งขัน)", "優勝 (ゆうしょう - championship/แชมป์)", "勝手 (かって - selfish/ตามอำเภอใจ)"],tags:["win","victory","ชนะ"],level:"N3"},
+  {kanji:"負",reading:"フ/ま(ける)",meaning:"Lose, Bear, Negative (แพ้, แบกรับ)",tips:"貝(เงิน)+刀(มีด) = เงินที่ถูกตัดออก Money cut away = lose",compounds:["負ける (まける - to lose/แพ้)", "勝負 (しょうぶ - match/การแข่งขัน)", "負担 (ふたん - burden/ภาระ)", "負傷 (ふしょう - injury/ได้รับบาดเจ็บ)"],tags:["lose","bear","แพ้","แบกรับ"],level:"N3"},
+  {kanji:"差",reading:"サ/さ(す)",meaning:"Difference, Gap (ความแตกต่าง, ช่องว่าง)",tips:"羊(แกะ)+工(งาน) = ความต่างในการทำงาน Difference in work",compounds:["差 (さ - difference/ความแตกต่าง)", "差別 (さべつ - discrimination/การเลือกปฏิบัติ)", "時差 (じさ - time difference/ความต่างเวลา)", "誤差 (ごさ - margin of error/ค่าผิดพลาด)"],tags:["difference","gap","ความแตกต่าง"],level:"N3"},
+  {kanji:"割",reading:"カツ/わ(る)",meaning:"Divide, Split, Ratio (แบ่ง, สัดส่วน, ส่วนลด)",tips:"害(อันตราย)+刀(มีด) = ตัดแบ่งออก Cut and divide",compounds:["割る (わる - to split/แบ่ง)", "割合 (わりあい - ratio/สัดส่วน)", "割引 (わりびき - discount/ส่วนลด)", "役割 (やくわり - role/บทบาท)"],tags:["divide","split","ratio","แบ่ง","สัดส่วน"],level:"N3"},
+  {kanji:"現",reading:"ゲン/あらわ(れる)",meaning:"Appear, Present, Current (ปรากฏ, ปัจจุบัน)",tips:"王(กษัตริย์)+見(เห็น) = กษัตริย์ปรากฏตัว King appears",compounds:["現在 (げんざい - present/ปัจจุบัน)", "現実 (げんじつ - reality/ความเป็นจริง)", "現代 (げんだい - modern era/ยุคปัจจุบัน)", "表現 (ひょうげん - expression/การแสดงออก)"],tags:["appear","present","current","ปัจจุบัน"],level:"N3"},
+  {kanji:"続",reading:"ゾク/つづ(く)",meaning:"Continue, Consecutive (ต่อเนื่อง)",tips:"糸(ด้าย)+売(ขาย) = ด้ายต่อกันไม่ขาด Thread continues = continue",compounds:["続く (つづく - to continue/ต่อเนื่อง)", "続ける (つづける - to keep doing/ทำต่อ)", "手続き (てつづき - procedure/ขั้นตอน)", "連続 (れんぞく - consecutive/ต่อเนื่อง)"],tags:["continue","consecutive","ต่อเนื่อง"],level:"N3"},
+  {kanji:"望",reading:"ボウ/のぞ(む)",meaning:"Hope, Wish, View (หวัง, ปรารถนา)",tips:"亡(สูญหาย)+月(จันทร์)+王(กษัตริย์) = มองจันทร์ด้วยความหวัง Gazing at moon with longing",compounds:["希望 (きぼう - hope/ความหวัง)", "望む (のぞむ - to wish/ปรารถนา)", "絶望 (ぜつぼう - despair/ความสิ้นหวัง)", "展望 (てんぼう - view/ทัศนียภาพ)"],tags:["hope","wish","view","ความหวัง","ปรารถนา"],level:"N3"},
+  {kanji:"願",reading:"ガン/ねが(う)",meaning:"Wish, Request, Pray (ขอร้อง, ปรารถนา)",tips:"原(แหล่งกำเนิด)+頁(หน้า) = ขอจากใจลึก Deep heartfelt request",compounds:["願う (ねがう - to wish/ขอร้อง)", "願書 (がんしょ - application/ใบสมัคร)", "お願い (おねがい - please/ขอร้อง)", "志願 (しがん - volunteer/อาสาสมัคร)"],tags:["wish","request","pray","ขอร้อง","ปรารถนา"],level:"N3"},
+  {kanji:"達",reading:"タツ/たち",meaning:"Reach, Achieve, Plural (บรรลุ, พหูพจน์)",tips:"幸(โชค)+辶(เดิน) = เดินไปถึงเป้าหมาย Walk to reach goal",compounds:["友達 (ともだち - friend/เพื่อน)", "達成 (たっせい - achievement/ความสำเร็จ)", "上達 (じょうたつ - improvement/การพัฒนา)", "伝達 (でんたつ - convey/การส่งต่อ)"],tags:["reach","achieve","plural","บรรลุ","เพื่อน"],level:"N3"},
+  {kanji:"必",reading:"ヒツ/かなら(ず)",meaning:"Certain, Necessary (แน่นอน, จำเป็น)",tips:"心(ใจ)+撇 = หัวใจที่แน่วแน่ Determined heart = certainly",compounds:["必ず (かならず - certainly/แน่นอน)", "必要 (ひつよう - necessary/จำเป็น)", "必死 (ひっし - desperate/ตายเป็นตาย)", "必勝 (ひっしょう - certain victory/ชนะแน่นอน)"],tags:["certain","necessary","แน่นอน","จำเป็น"],level:"N3"},
+  {kanji:"失",reading:"シツ/うしな(う)",meaning:"Lose, Miss, Fail (สูญเสีย, พลาด)",tips:"手(มือ)+乙 = มือปล่อยสิ่งของหลุด Hand drops something = lose",compounds:["失う (うしなう - to lose/สูญเสีย)", "失敗 (しっぱい - failure/ความล้มเหลว)", "失礼 (しつれい - excuse me/ขอโทษ)", "紛失 (ふんしつ - loss/การสูญหาย)"],tags:["lose","miss","fail","สูญเสีย","ล้มเหลว"],level:"N3"},
+  {kanji:"確",reading:"カク/たし(か)",meaning:"Certain, Confirm (แน่ใจ, ยืนยัน)",tips:"石(หิน)+隺(นกบิน) = แน่วแน่เหมือนหิน Solid as stone = certain",compounds:["確認 (かくにん - confirm/ยืนยัน)", "確かめる (たしかめる - to verify/ตรวจสอบ)", "確実 (かくじつ - certain/แน่นอน)", "明確 (めいかく - clear/ชัดเจน)"],tags:["certain","confirm","แน่ใจ","ยืนยัน"],level:"N3"},
+  {kanji:"改",reading:"カイ/あらた(める)",meaning:"Reform, Revise (ปรับปรุง, แก้ไข)",tips:"己(ตัวเอง)+攴(เคาะ) = ตีตัวเองให้ดีขึ้น Beat self to improve",compounds:["改善 (かいぜん - improvement/การปรับปรุง)", "改正 (かいせい - revision/การแก้ไข)", "改札 (かいさつ - ticket gate/ประตูตรวจตั๋ว)", "改める (あらためる - to reform/แก้ไข)"],tags:["reform","revise","ปรับปรุง","แก้ไข"],level:"N3"},
+  {kanji:"然",reading:"ゼン/ネン",meaning:"Natural, So, As is (ธรรมชาติ, เช่นนั้น)",tips:"肉(เนื้อ)+犬(สุนัข)+灬(ไฟ) = ปรุงเนื้อตามธรรมชาติ Cooking naturally",compounds:["自然 (しぜん - nature/ธรรมชาติ)", "当然 (とうぜん - natural/ธรรมดา)", "突然 (とつぜん - sudden/ทันทีทันใด)", "全然 (ぜんぜん - not at all/ไม่เลย)"],tags:["natural","so","ธรรมชาติ","เช่นนั้น"],level:"N3"},
+  {kanji:"論",reading:"ロン",meaning:"Argument, Theory, Discuss (การโต้แย้ง, ทฤษฎี)",tips:"言(พูด)+冊+口 = ถกเถียงกัน Words in debate = argument",compounds:["議論 (ぎろん - debate/การถกเถียง)", "論文 (ろんぶん - thesis/วิทยานิพนธ์)", "結論 (けつろん - conclusion/บทสรุป)", "理論 (りろん - theory/ทฤษฎี)"],tags:["argument","theory","discuss","ทฤษฎี","โต้แย้ง"],level:"N3"},
+  {kanji:"断",reading:"ダン/ことわ(る)",meaning:"Refuse, Cut, Decide (ปฏิเสธ, ตัด, ตัดสินใจ)",tips:"斤(ขวาน)+米(ข้าว) = ตัดข้าวด้วยขวาน Cut rice = decide/cut",compounds:["断る (ことわる - to refuse/ปฏิเสธ)", "決断 (けつだん - decision/การตัดสินใจ)", "中断 (ちゅうだん - interruption/การหยุดชะงัก)", "油断 (ゆだん - carelessness/ความประมาท)"],tags:["refuse","cut","decide","ปฏิเสธ","ตัดสินใจ"],level:"N3"},
+  {kanji:"基",reading:"キ/もと",meaning:"Foundation, Base (รากฐาน, พื้นฐาน)",tips:"其(สิ่งนั้น)+土(ดิน) = ดินรากฐาน Earth foundation",compounds:["基本 (きほん - basics/พื้นฐาน)", "基準 (きじゅん - standard/มาตรฐาน)", "基礎 (きそ - foundation/รากฐาน)", "基地 (きち - base/ฐานที่มั่น)"],tags:["foundation","base","รากฐาน","พื้นฐาน"],level:"N3"},
+  {kanji:"測",reading:"ソク/はか(る)",meaning:"Measure, Survey (วัด, สำรวจ)",tips:"氵(น้ำ)+則(กฎ) = วัดน้ำตามกฎ Measure water by rule",compounds:["測る (はかる - to measure/วัด)", "測定 (そくてい - measurement/การวัด)", "予測 (よそく - prediction/การทำนาย)", "観測 (かんそく - observation/การสังเกต)"],tags:["measure","survey","วัด","สำรวจ"],level:"N3"},
+    ];
+
+    // =====================================================================
+    // Auto-build word DB from kanji compounds
+    // =====================================================================
+    const BUILTIN_WORD_DB = [];
+    const _ws = new Set();
+    BUILTIN_KANJI_DB.forEach(k => {
+      k.compounds.forEach(c => {
+        const m = c.match(/^(.+?)\s*\((.+?)\s*-\s*(.+?)\)$/);
+        if (m && !_ws.has(m[1])) { _ws.add(m[1]); BUILTIN_WORD_DB.push({word:m[1],reading:m[2].trim(),meaning:m[3].trim()}); }
+      });
+    });
+
+    // カタカナ→ひらがな変換（"スイ" → "すい"）
+    const kataToHira = s => s.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    // 検索クエリ正規化：小文字化 + カタカナ→ひらがな
+    const norm = s => kataToHira(s.toLowerCase().trim());
+
+    const offlineSearchWords = (kw) => {
+      const q = norm(kw);
+
+      // 漢字1文字の直接検索（例: "水"→水の熟語一覧）
+      if(/^[\u4E00-\u9FFF]$/.test(kw.trim())) {
+        const k = offlineGetKanji(kw.trim());
+        if(k) return k.compounds.map(c=>{const m=c.match(/^(.+?)\s*\((.+?)\s*-\s*(.+?)\)$/);return m?{word:m[1],reading:m[2].trim(),meaning:m[3].trim()}:null;}).filter(Boolean).slice(0,5);
+      }
+
+      // 熟語DB検索（かな正規化あり）
+      let r = BUILTIN_WORD_DB.filter(w =>
+        w.word.includes(kw) ||
+        norm(w.reading).includes(q) ||
+        w.meaning.toLowerCase().includes(q)
+      );
+
+      // 漢字DB検索フォールバック（読み・意味・タグで）
+      if(!r.length) {
+        BUILTIN_KANJI_DB.filter(k =>
+          k.kanji.includes(kw) ||
+          norm(k.reading).includes(q) ||    // "すい"が"スイ/みず"にマッチ
+          k.meaning.toLowerCase().includes(q) ||
+          k.tags.some(t => norm(t).includes(q))
+        ).forEach(k => k.compounds.forEach(c => {
+          const m = c.match(/^(.+?)\s*\((.+?)\s*-\s*(.+?)\)$/);
+          if(m) r.push({word:m[1],reading:m[2].trim(),meaning:m[3].trim()});
+        }));
+      }
+
+      const s=new Set(); r=r.filter(x=>{if(s.has(x.word))return false;s.add(x.word);return true;}); return r.slice(0,5);
+    };
+    const offlineGetKanji = (ch) => BUILTIN_KANJI_DB.find(k=>k.kanji===ch)||null;
+    const offlineRandomKanji = (filter='All', favList=[]) => {
+      let pool;
+      if(filter==='FAV') pool = BUILTIN_KANJI_DB.filter(k=>favList.includes(k.kanji));
+      else pool = filter==='All' ? BUILTIN_KANJI_DB : BUILTIN_KANJI_DB.filter(k=>k.level===filter);
+      if(!pool.length) return BUILTIN_KANJI_DB[0];
+      return pool[Math.floor(Math.random()*pool.length)];
+    };
+
+    // Helper: level count
+    const levelCount = (lv,favList=[]) => lv==='All' ? BUILTIN_KANJI_DB.length : lv==='FAV' ? favList.length : BUILTIN_KANJI_DB.filter(k=>k.level===lv).length;
+
+    const I = {
+      Grad:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+      Load:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
+      Srch:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+      Mic:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>,
+      MicOff:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><line x1="12" x2="12" y1="19" y2="22"/></svg>,
+      Ref:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+      Play:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>,
+      Book:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+      Bulb:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>,
+      List:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>,
+      Key:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.3 9.3"/><path d="m18 5 3-3"/></svg>,
+      X:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+      Check:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>,
+      Heart:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={p.filled?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+      Trophy:(p)=><svg {...p} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>,
+    };
+
+    const LevelBadge = ({level}) => {
+      if(!level) return null;
+      const cfg = level==='N5' ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'
+        : level==='N4' ? 'bg-blue-900/50 text-blue-400 border border-blue-800'
+        : 'bg-violet-900/50 text-violet-400 border border-violet-800';
+      return <span className={`text-xs font-black px-2 py-0.5 rounded-full ${cfg}`}>JLPT {level}</span>;
+    };
+
+    const ApiKeyModal = ({show,onClose,currentKey,onSave}) => {
+      const [key,setKey] = useState(currentKey);
+      if(!show) return null;
+      return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="bg-[#1C1917] rounded-2xl max-w-lg w-full p-6 shadow-2xl fade-in border border-stone-700" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-black text-lg text-stone-100 flex items-center gap-2"><I.Key className="w-5 h-5 text-red-400"/> API Key Settings</h3>
+              <button onClick={onClose} className="p-1 hover:bg-stone-700 rounded-lg text-stone-400"><I.X className="w-5 h-5"/></button>
+            </div>
+            <div className="mb-4 text-sm text-stone-400 space-y-2">
+              <p className="font-bold text-stone-300">Gemini API Key (Free / ฟรี)</p>
+              <p>Without API key: {BUILTIN_KANJI_DB.length}+ built-in kanji. With key: unlimited AI content.</p>
+              <p className="font-bold text-stone-200">How to get a free key / วิธีรับ API Key ฟรี:</p>
+              <ol className="list-decimal ml-5 space-y-1">
+                <li>Go to <span className="font-mono text-red-400 font-bold">aistudio.google.com</span></li>
+                <li>Sign in with Google / ลงชื่อเข้าใช้</li>
+                <li>Click "Get API Key" → "Create API Key"</li>
+                <li>Copy & paste below / คัดลอกแล้ววางด้านล่าง</li>
+              </ol>
+            </div>
+            <input type="text" value={key} onChange={e=>setKey(e.target.value)} placeholder="Paste your Gemini API key here..."
+              className="w-full px-4 py-3 border-2 border-stone-700 rounded-xl focus:border-red-500 outline-none text-sm font-mono bg-stone-800 text-stone-100 placeholder-stone-500 mb-4"/>
+            <div className="flex gap-3">
+              <button onClick={()=>{onSave(key.trim());onClose();}} className="flex-1 px-4 py-3 bg-red-700 text-white rounded-xl font-bold hover:bg-red-600 transition-colors flex items-center justify-center gap-2">
+                <I.Check className="w-4 h-4"/> Save / บันทึก
+              </button>
+              <button onClick={()=>{onSave('');onClose();}} className="px-4 py-3 bg-stone-700 text-stone-300 rounded-xl font-bold hover:bg-stone-600 transition-colors text-sm">
+                Use Offline
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [userApiKey,setUserApiKey] = useState(()=>{try{return localStorage.getItem('kanji_api_key')||'';}catch{return '';}});
+      const [jlptFilter,setJlptFilter] = useState(()=>{try{return localStorage.getItem('kanji_jlpt_filter')||'All';}catch{return 'All';}});
+      const modelName = "gemini-2.0-flash";
+      const [kanjiData,setKanjiData] = useState(null);
+      const [paths,setPaths] = useState([]);
+      const [loading,setLoading] = useState(false);
+      const [error,setError] = useState(null);
+      const [searchInput,setSearchInput] = useState('');
+      const [isListening,setIsListening] = useState(false);
+      const [wordCandidates,setWordCandidates] = useState([]);
+      const [selectedWord,setSelectedWord] = useState(null);
+      const [selectableKanjis,setSelectableKanjis] = useState([]);
+      const [currentStroke,setCurrentStroke] = useState(-1);
+      const [isAnimating,setIsAnimating] = useState(false);
+      const [svgFailed,setSvgFailed] = useState(false);
+      const [showApiModal,setShowApiModal] = useState(false);
+      const isOnline = !!userApiKey;
+
+      // Favorites
+      const [favorites,setFavorites] = useState(()=>{try{return JSON.parse(localStorage.getItem('kanji_fav_th')||'[]');}catch{return [];}});
+      const toggleFavorite = (k) => {
+        const n = favorites.includes(k) ? favorites.filter(x=>x!==k) : [...favorites,k];
+        setFavorites(n); try{localStorage.setItem('kanji_fav_th',JSON.stringify(n));}catch{}
+      };
+      const isFav = (k) => favorites.includes(k);
+
+      // Quiz
+      const [quizMode,setQuizMode] = useState(false);
+      const [quiz,setQuiz] = useState(null); // {kanji, qType, correct, choices, selected, score, total}
+      const startQuiz = () => {
+        setQuiz({kanji:null,qType:'reading',correct:'',choices:[],selected:null,score:0,total:0});
+        nextQuizQuestion({score:0,total:0});
+      };
+      const nextQuizQuestion = (prev) => {
+        const pool = jlptFilter==='All' ? BUILTIN_KANJI_DB : BUILTIN_KANJI_DB.filter(k=>k.level===jlptFilter);
+        if(!pool.length) return;
+        const k = pool[Math.floor(Math.random()*pool.length)];
+        const qType = Math.random()>0.5 ? 'reading' : 'meaning';
+        const correct = qType==='reading' ? k.reading : k.meaning;
+        const others = pool.filter(x=>x.kanji!==k.kanji).sort(()=>Math.random()-0.5).slice(0,3);
+        const wrongs = others.map(x=>qType==='reading'?x.reading:x.meaning);
+        const choices = [...wrongs,correct].sort(()=>Math.random()-0.5);
+        setQuiz({kanji:k, qType, correct, choices, selected:null, score:prev?.score||0, total:prev?.total||0});
+        fetchKanji(k.kanji);
+      };
+      const answerQuiz = (choice) => {
+        if(!quiz||quiz.selected) return;
+        const correct = choice===quiz.correct;
+        setQuiz(q=>({...q, selected:choice, score:q.score+(correct?1:0), total:q.total+1}));
+      };
+      const exitQuiz = () => { setQuizMode(false); setQuiz(null); };
+
+      // Mobile tab
+      const [mobileTab, setMobileTab] = useState('learn');
+
+      const saveApiKey = (k) => { setUserApiKey(k); try{localStorage.setItem('kanji_api_key',k);}catch{} };
+      const changeFilter = (lv) => { setJlptFilter(lv); try{localStorage.setItem('kanji_jlpt_filter',lv);}catch{} };
+
+      const geminiCall = async (sys, txt, schema) => {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${userApiKey}`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({contents:[{parts:[{text:txt}]}],systemInstruction:{parts:[{text:sys}]},generationConfig:{responseMimeType:"application/json",responseSchema:schema}})
+        });
+        if(!r.ok) throw new Error(`API Error ${r.status}`);
+        const d = await r.json();
+        let t = d.candidates[0].content.parts[0].text;
+        t = t.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+        return JSON.parse(t);
+      };
+
+      const startListening = () => {
+        setError(null);
+        const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+        if(!SR){setError("Voice not supported");return;}
+        const r=new SR();r.start();setIsListening(true);
+        r.onresult=(e)=>{const t=e.results[0][0].transcript.trim();if(t){setSearchInput(t);searchWords(t);}setIsListening(false);};
+        r.onerror=()=>{setIsListening(false);setError("Could not hear / ไม่ได้ยินเสียง");};
+        r.onend=()=>setIsListening(false);
+      };
+
+      const searchWords = async (keyword) => {
+        setLoading(true);setError(null);setWordCandidates([]);setSelectedWord(null);setSelectableKanjis([]);setKanjiData(null);setPaths([]);setSvgFailed(false);
+        if(!isOnline) {
+          const res=offlineSearchWords(keyword);
+          if(res.length>0) setWordCandidates(res);
+          else setError("見つかりません。例: みず・かわ・やま・たべる / water・fire・school / น้ำ・ไฟ・กิน / 水・火・山");
+          setLoading(false); return;
+        }
+        try {
+          const levelHint = jlptFilter!=='All' ? ` JLPT ${jlptFilter}レベルを優先。` : '';
+          const data = await geminiCall(
+            `あなたは優秀な日本語教師です。キーワードに関連する漢字を使った日本語単語を3〜5個提案。meaningにはタイ語と英語を併記。JSON配列で出力。${levelHint}`,
+            `Keyword: ${keyword}`,
+            {type:"ARRAY",items:{type:"OBJECT",properties:{word:{type:"STRING"},reading:{type:"STRING"},meaning:{type:"STRING"}},required:["word","reading","meaning"]}}
+          );
+          if(data?.length>0) setWordCandidates(data);
+          else setError("No words found");
+        } catch(e) {
+          const res=offlineSearchWords(keyword);
+          if(res.length>0){setWordCandidates(res);setError(null);}
+          else setError(`API failed. (${e.message})`);
+        }
+        setLoading(false);
+      };
+
+      const handleWordSelect = (w) => {
+        setSelectedWord(w);
+        const kanjis=w.word.match(/[\u4E00-\u9FFF]/g)||[];
+        setSelectableKanjis(kanjis);
+        if(kanjis.length>0) fetchKanji(kanjis[0]);
+        else setError("No Kanji in this word");
+      };
+
+      const fetchKanji = async (target=null, filter=null) => {
+        const activeFilter = filter !== null ? filter : jlptFilter;
+        setLoading(true);setError(null);setKanjiData(null);setPaths([]);setCurrentStroke(-1);setSvgFailed(false);
+        if(!isOnline){
+          let d=target?offlineGetKanji(target):offlineRandomKanji(activeFilter,favorites);
+          if(!d&&target) d={kanji:target,reading:"(offline)",meaning:"(no data)",tips:"Add API key for full data / เพิ่ม API Key เพื่อข้อมูลครบ",compounds:[],level:null};
+          setKanjiData(d); await fetchSVG(d.kanji); return;
+        }
+        try {
+          const seed=Math.floor(Math.random()*100000);
+          const levelHint = activeFilter!=='All' ? `JLPT ${activeFilter}レベルの` : '';
+          const q=target?`漢字「${target}」について生成してください。`:`${levelHint}常用漢字をランダムに1つ選び生成（シード: ${seed}）`;
+          const data = await geminiCall(
+            "あなたは優秀な日本語教師です。タイ人・英語話者向けにJSON出力。meaning/tipsはタイ語メイン+英語併記。日本語解説不要。",q,
+            {type:"OBJECT",properties:{kanji:{type:"STRING"},reading:{type:"STRING"},meaning:{type:"STRING"},tips:{type:"STRING"},compounds:{type:"ARRAY",items:{type:"STRING"}}},required:["kanji","reading","meaning","tips","compounds"]}
+          );
+          if(data){setKanjiData(data);await fetchSVG(data.kanji);return;}
+        } catch(e) {
+          let d=target?offlineGetKanji(target):offlineRandomKanji(activeFilter,favorites);
+          if(!d&&target) d={kanji:target,reading:"(offline)",meaning:"(API failed)",tips:e.message,compounds:[],level:null};
+          if(d){setKanjiData(d);await fetchSVG(d.kanji);return;}
+          setError("Failed to load kanji"); setLoading(false);
+        }
+      };
+
+      const fetchSVG = async (ch) => {
+        try {
+          const hex=ch.charCodeAt(0).toString(16).padStart(5,'0');
+          const r=await fetch(`https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hex}.svg`);
+          if(!r.ok) throw new Error("SVG not found");
+          const txt=await r.text();
+          const doc=new DOMParser().parseFromString(txt,"image/svg+xml");
+          const ps=Array.from(doc.querySelectorAll('path')).map(p=>p.getAttribute('d')).filter(Boolean);
+          if(!ps.length) throw new Error("Empty SVG");
+          setPaths(ps);setSvgFailed(false);startAnimation(ps.length);
+        } catch(e) {console.warn("SVG:",e.message);setPaths([]);setSvgFailed(true);}
+        finally {setLoading(false);}
+      };
+
+      const startAnimation = (total) => {
+        setCurrentStroke(-1);setIsAnimating(true);let cur=0;
+        const id=setInterval(()=>{setCurrentStroke(cur);cur++;if(cur>=total){clearInterval(id);setIsAnimating(false);}},1200);
+      };
+      const handleReplay = () => { if(paths.length>0&&!isAnimating) startAnimation(paths.length); };
+      const handleSearchSubmit = (e) => { e.preventDefault(); if(searchInput.trim()) searchWords(searchInput.trim()); };
+      const handleRandom = () => { setSearchInput('');setWordCandidates([]);setSelectedWord(null);setSelectableKanjis([]);fetchKanji(null, jlptFilter); };
+
+      useEffect(()=>{fetchKanji();},[]);
+
+      // JLPT filter button config
+      const filterBtns = [
+        {lv:'All', label:'All', active:'bg-stone-200 text-stone-900', inactive:'bg-stone-800 text-stone-400 border border-stone-700 hover:bg-stone-700'},
+        {lv:'N5',  label:'N5',  active:'bg-emerald-500 text-white', inactive:'bg-emerald-900/30 text-emerald-400 border border-emerald-800 hover:bg-emerald-900/50'},
+        {lv:'N4',  label:'N4',  active:'bg-blue-500 text-white',    inactive:'bg-blue-900/30 text-blue-400 border border-blue-800 hover:bg-blue-900/50'},
+        {lv:'N3',  label:'N3',  active:'bg-violet-500 text-white',  inactive:'bg-violet-900/30 text-violet-400 border border-violet-800 hover:bg-violet-900/50'},
+      ];
+
+      return (
+        <div className="min-h-screen flex items-start justify-center p-4 pb-24 lg:pb-4 lg:items-center font-sans text-stone-100">
+          <ApiKeyModal show={showApiModal} onClose={()=>setShowApiModal(false)} currentKey={userApiKey} onSave={saveApiKey}/>
+          <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+            {/* LEFT — Kanji SVG (mobile: hidden when learn tab) */}
+            <div className={`bg-[#1C1917] p-6 md:p-8 rounded-[2rem] shadow-[0_12px_40px_rgba(0,0,0,0.5)] border border-[#2A2520] flex-col items-center ${mobileTab==='kanji'?'flex':'hidden'} lg:flex`}>
+              <div className="w-full text-center mb-4 pb-4 border-b border-[#2A2520]">
+                <div className="flex justify-center items-center gap-3 mb-1">
+                  <I.Grad className="w-8 h-8 text-red-500"/>
+                  <h1 className="text-4xl font-black text-stone-100 tracking-tighter">Kanji <span className="text-red-400">Master</span></h1>
+                  <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.5)]"><span className="text-base font-black font-serif" style={{color:'#111'}}>漢</span></div>
+                </div>
+                <h2 className="text-sm font-black text-stone-400 tracking-[0.3em] mt-1 mb-2">漢字マスター</h2>
+                <div className="text-[10px] font-bold text-stone-500 tracking-widest mb-1">v09-TH · JLPT N5+N4+N3</div>
+                <div className="flex items-center justify-center gap-1 mb-3">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300 border border-orange-800">TH</span>
+                  <span className="text-stone-600 text-[10px]">·</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300 border border-blue-800">EN</span>
+                  <span className="text-stone-600 text-[10px]">·</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-800">JP</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                  <button onClick={()=>setShowApiModal(true)} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all ${isOnline?'bg-green-900/40 text-green-400 border border-green-800 hover:bg-green-900/60':'bg-stone-800 text-stone-400 border border-stone-600 hover:bg-stone-700'}`}>
+                    <I.Key className="w-3 h-3"/>
+                    {isOnline ? 'Online (Gemini AI)' : `Offline (${BUILTIN_KANJI_DB.length} Kanji)`}
+                  </button>
+                  <button onClick={()=>{ setQuizMode(true); startQuiz(); }} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-amber-900/40 text-amber-300 border border-amber-800 hover:bg-amber-900/60 transition-all">
+                    <I.Trophy className="w-3 h-3"/> Quiz
+                  </button>
+                </div>
+              </div>
+
+              {loading && !kanjiData ? (
+                <div className="flex-1 w-full flex flex-col items-center justify-center text-stone-400 min-h-[300px]">
+                  <I.Load className="animate-spin w-12 h-12 mb-4 text-red-600"/>
+                  <p className="font-bold tracking-widest text-sm">Loading...</p>
+                </div>
+              ) : kanjiData && paths.length > 0 ? (
+                <div className="flex-1 w-full flex flex-col items-center justify-start mt-2">
+                  <div className="relative w-64 h-64 sm:w-72 sm:h-72 lg:w-80 lg:h-80 bg-[#161310] border-2 border-dashed border-stone-700 rounded-2xl overflow-hidden shadow-inner">
+                    <div className="absolute inset-0 pointer-events-none"><div className="absolute top-1/2 w-full h-px bg-stone-700"></div><div className="absolute left-1/2 w-px h-full bg-stone-700"></div></div>
+                    <svg viewBox="0 0 109 109" className="w-full h-full p-4">
+                      {paths.map((d,i)=>(<path key={`bg-${i}`} d={d} fill="none" stroke="#3a3530" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>))}
+                      {paths.map((d,i)=>(<path key={`s-${i}-${currentStroke}`} d={d} fill="none" stroke={i===currentStroke?"#ef4444":"#e7e5e4"} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className={i===currentStroke?"animate-draw":""} style={{visibility:i<=currentStroke?'visible':'hidden'}}/>))}
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-4 mt-6">
+                    <button onClick={handleReplay} disabled={isAnimating} className="flex items-center gap-2 px-6 py-3 bg-stone-800 text-white rounded-full font-bold hover:bg-stone-700 disabled:opacity-50 transition-all shadow-md text-sm">
+                      <I.Play className="w-4 h-4" fill="currentColor"/> Replay
+                    </button>
+                    <div className="text-sm font-bold text-stone-400 bg-stone-800 px-4 py-3 rounded-full">
+                      {currentStroke>=0?Math.min(currentStroke+1,paths.length):0}/{paths.length} Strokes
+                    </div>
+                  </div>
+                </div>
+              ) : kanjiData && svgFailed ? (
+                <div className="flex-1 w-full flex flex-col items-center justify-center min-h-[300px]">
+                  <div className="relative w-64 h-64 sm:w-72 sm:h-72 lg:w-80 lg:h-80 bg-[#161310] border-2 border-dashed border-stone-700 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center">
+                    <div className="absolute inset-0 pointer-events-none"><div className="absolute top-1/2 w-full h-px bg-stone-700"></div><div className="absolute left-1/2 w-px h-full bg-stone-700"></div></div>
+                    <span className="text-[10rem] font-serif text-stone-100 leading-none select-none">{kanjiData.kanji}</span>
+                  </div>
+                  <p className="text-xs text-stone-400 mt-4 font-medium">Stroke animation unavailable</p>
+                </div>
+              ) : null}
+            </div>
+
+            {/* RIGHT — Search & Info OR Quiz (mobile: hidden when kanji tab) */}
+            <div className={`flex-col gap-6 ${mobileTab==='learn'?'flex':'hidden'} lg:flex`}>
+              {quizMode && quiz ? (
+                <div className="bg-[#1C1917] p-6 md:p-8 rounded-[2rem] shadow-[0_12px_40px_rgba(0,0,0,0.5)] border border-[#2A2520] flex flex-col gap-5">
+                  {/* Quiz Header */}
+                  <div className="flex items-center justify-between pb-4 border-b border-stone-800">
+                    <div className="flex items-center gap-2">
+                      <I.Trophy className="w-5 h-5 text-amber-400"/>
+                      <span className="font-black text-amber-300 text-sm">QUIZ MODE</span>
+                      {jlptFilter!=='All'&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-stone-800 text-stone-400">{jlptFilter}</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-black text-stone-300">{quiz.score}<span className="text-stone-500 font-normal">/{quiz.total}</span></span>
+                      <button onClick={exitQuiz} className="p-1.5 hover:bg-stone-700 rounded-lg text-stone-400"><I.X className="w-4 h-4"/></button>
+                    </div>
+                  </div>
+                  {/* Question */}
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">
+                      {quiz.qType==='reading' ? 'この漢字の読み方は？/ คำอ่านคืออะไร？' : 'この漢字の意味は？/ ความหมายคืออะไร？'}
+                    </p>
+                    <div className="text-7xl font-black text-stone-100 my-4">{quiz.kanji?.kanji}</div>
+                  </div>
+                  {/* Choices */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {quiz.choices.map((c,i)=>{
+                      const isSelected = quiz.selected===c;
+                      const isCorrect = c===quiz.correct;
+                      const showResult = !!quiz.selected;
+                      let cls = 'p-4 rounded-2xl text-sm font-bold text-left leading-snug transition-all border-2 ';
+                      if(!showResult) cls += 'bg-stone-800 text-stone-200 border-stone-700 hover:border-red-500 hover:bg-stone-700 cursor-pointer';
+                      else if(isCorrect) cls += 'bg-emerald-900/50 text-emerald-200 border-emerald-600';
+                      else if(isSelected) cls += 'bg-red-900/50 text-red-200 border-red-600';
+                      else cls += 'bg-stone-800/40 text-stone-500 border-stone-800';
+                      return (
+                        <button key={i} onClick={()=>answerQuiz(c)} disabled={!!quiz.selected} className={cls}>
+                          {showResult&&isCorrect&&<I.Check className="w-4 h-4 inline mr-1 text-emerald-400"/>}
+                          {showResult&&isSelected&&!isCorrect&&<I.X className="w-4 h-4 inline mr-1 text-red-400"/>}
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Result + Next */}
+                  {quiz.selected && (
+                    <div className="flex flex-col gap-3 mt-2">
+                      <div className={`text-center font-black text-base ${quiz.selected===quiz.correct?'text-emerald-400':'text-red-400'}`}>
+                        {quiz.selected===quiz.correct ? '✓ ถูกต้อง！Correct！' : `✗ ไม่ถูก。Correct: ${quiz.correct}`}
+                      </div>
+                      <button onClick={()=>nextQuizQuestion(quiz)} className="w-full py-3 bg-amber-700 hover:bg-amber-600 text-white font-black rounded-2xl transition-colors flex items-center justify-center gap-2">
+                        Next Question →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+              <div className="bg-[#1C1917] p-6 md:p-8 rounded-[2rem] shadow-[0_12px_40px_rgba(0,0,0,0.5)] border border-[#2A2520] flex-1 flex flex-col">
+
+                {/* JLPT Filter Row */}
+                <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-800 flex-wrap">
+                  <span className="text-xs font-black text-stone-400 uppercase tracking-wider mr-1">JLPT:</span>
+                  {filterBtns.map(({lv,label,active,inactive})=>(
+                    <button key={lv} onClick={()=>changeFilter(lv)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-black transition-all ${jlptFilter===lv ? active : inactive}`}>
+                      {label}
+                      <span className={`ml-1 font-normal ${jlptFilter===lv?'opacity-80':'opacity-60'}`}>
+                        ({levelCount(lv)})
+                      </span>
+                    </button>
+                  ))}
+                  <button onClick={()=>changeFilter('FAV')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-black transition-all flex items-center gap-1 ${jlptFilter==='FAV'?'bg-pink-500 text-white':'bg-pink-900/30 text-pink-400 border border-pink-800 hover:bg-pink-900/50'}`}>
+                    <I.Heart className="w-3 h-3" filled={jlptFilter==='FAV'}/> ({favorites.length})
+                  </button>
+                </div>
+
+                {/* Search Row */}
+                <div className="flex flex-col gap-2 mb-6">
+                  <form onSubmit={handleSearchSubmit} className="flex gap-2 relative">
+                    <input type="text" value={searchInput} onChange={e=>setSearchInput(e.target.value)} placeholder="みず・water・น้ำ・山"
+                      className="flex-1 min-w-0 pl-4 pr-10 py-3 border-2 border-stone-700 rounded-xl focus:border-red-500 outline-none text-base bg-stone-800 text-stone-100 placeholder-stone-500 focus:bg-[#1f1c19] transition-colors"/>
+                    <button type="button" onClick={startListening} className={`absolute right-14 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${isListening?'bg-red-900/50 text-red-400 animate-pulse':'text-stone-500 hover:text-red-400 hover:bg-red-900/30'}`}>
+                      {isListening?<I.Mic className="w-5 h-5"/>:<I.MicOff className="w-5 h-5"/>}
+                    </button>
+                    <button type="submit" disabled={loading||!searchInput.trim()} className="px-4 py-3 bg-stone-800 text-white rounded-xl font-bold disabled:opacity-50 hover:bg-stone-700 transition-colors flex items-center justify-center shadow-md w-12">
+                      <I.Srch className="w-5 h-5"/>
+                    </button>
+                  </form>
+                  <button onClick={handleRandom} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-900/30 text-red-300 border border-red-800 rounded-xl font-bold hover:bg-red-900/50 disabled:opacity-50 transition-all text-sm">
+                    <I.Ref className={`w-4 h-4 ${loading?'animate-spin':''}`}/>
+                    Random{jlptFilter!=='All'?` (${jlptFilter})`:''}
+                  </button>
+                </div>
+
+                {error && <div className="mb-4 text-center text-red-400 bg-red-950/50 p-4 rounded-2xl border border-red-900/50"><p className="font-bold text-sm">{error}</p></div>}
+
+                {wordCandidates.length>0 && (
+                  <div className="mb-6 p-4 bg-stone-800/50 rounded-2xl border border-stone-700">
+                    <h3 className="text-xs font-bold text-stone-400 mb-3">Select a word / เลือกคำ:</h3>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {wordCandidates.map((c,i)=>(
+                        <button key={i} onClick={()=>handleWordSelect(c)} className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${selectedWord?.word===c.word?'bg-red-700 text-white shadow-md':'bg-stone-700 text-stone-200 border border-stone-600 hover:bg-red-900/30 hover:border-red-800'}`}>
+                          {c.word} <span className="font-normal opacity-80 ml-1 text-xs">({c.meaning})</span>
+                        </button>
+                      ))}
+                    </div>
+                    {selectedWord && selectableKanjis.length>0 && (
+                      <div className="pt-4 border-t border-stone-700 flex items-center gap-3">
+                        <span className="text-xs font-bold text-stone-500">Which Kanji?</span>
+                        <div className="flex gap-2">
+                          {selectableKanjis.map((k,i)=>(
+                            <button key={i} onClick={()=>fetchKanji(k)} className={`w-10 h-10 rounded-xl text-lg font-black transition-all ${kanjiData?.kanji===k?'bg-stone-200 text-stone-900 shadow-lg scale-110':'bg-stone-700 text-stone-200 border-2 border-stone-600 hover:border-red-500'}`}>{k}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {kanjiData ? (
+                  <div className="space-y-5 flex-1 overflow-y-auto pr-2 pb-4">
+                    <div className="flex items-center gap-4 mb-2 flex-wrap">
+                      <h2 className="text-4xl font-black text-stone-100">{kanjiData.kanji}</h2>
+                      <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Lesson Data</span>
+                      <LevelBadge level={kanjiData.level}/>
+                      <button onClick={()=>toggleFavorite(kanjiData.kanji)} className={`ml-auto p-2 rounded-xl transition-all ${isFav(kanjiData.kanji)?'text-pink-400 bg-pink-900/30 border border-pink-800':'text-stone-500 hover:text-pink-400 hover:bg-pink-900/20 border border-transparent'}`} title="お気に入り">
+                        <I.Heart className="w-5 h-5" filled={isFav(kanjiData.kanji)}/>
+                      </button>
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-1.5 flex items-center gap-2"><I.Book className="w-3.5 h-3.5"/> Reading & Meaning</h3>
+                      <div className="bg-stone-800/50 p-3.5 rounded-2xl border border-stone-700">
+                        <p className="font-bold text-stone-100 mb-1 text-base">{kanjiData.reading}</p>
+                        <p className="text-stone-400 font-medium text-sm">{kanjiData.meaning}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-2"><I.Bulb className="w-3.5 h-3.5"/> Tips / เคล็ดลับ</h3>
+                      <div className="bg-amber-950/30 p-3.5 rounded-2xl border border-amber-900/50 text-amber-200 leading-relaxed font-medium text-sm">{kanjiData.tips}</div>
+                    </div>
+                    {kanjiData.compounds?.length>0 && (
+                      <div>
+                        <h3 className="text-xs font-bold text-teal-400 uppercase tracking-wider mb-1.5 flex items-center gap-2"><I.List className="w-3.5 h-3.5"/> Compounds / คำประสม</h3>
+                        <div className="bg-teal-950/30 p-3.5 rounded-2xl border border-teal-900/50">
+                          <ul className="space-y-1.5">
+                            {kanjiData.compounds.map((c,i)=>(<li key={i} className="flex items-center gap-2 text-teal-200 font-bold text-sm"><span className="w-1.5 h-1.5 bg-teal-500 rounded-full flex-shrink-0"></span>{c}</li>))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (!loading && !wordCandidates.length && !error) ? (
+                  <div className="flex-1 flex items-center justify-center text-stone-400 font-medium text-sm pb-8 text-center leading-relaxed">
+                    みず・かわ・やま・たべる<br/>water・fire・school・red<br/>น้ำ・ไฟ・กิน・สีแดง
+                  </div>
+                ) : null}
+              </div>
+              )}
+            </div>
+          </div>
+          {/* Mobile Tab Bar */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#1C1917] border-t border-[#2A2520] flex z-50 pb-safe">
+            <button onClick={()=>{setMobileTab('learn');setQuizMode(false);}} className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${mobileTab==='learn'&&!quizMode?'text-red-400':'text-stone-500'}`}>
+              <I.Book className="w-5 h-5"/>
+              <span className="text-[10px] font-black tracking-wider">学習 / เรียน</span>
+            </button>
+            <button onClick={()=>{ setMobileTab('kanji'); setQuizMode(false); }} className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${mobileTab==='kanji'?'text-red-400':'text-stone-500'}`}>
+              <span className="text-xl font-black font-serif leading-none">漢</span>
+              <span className="text-[10px] font-black tracking-wider">筆順 / จังหวะ</span>
+            </button>
+            <button onClick={()=>{ setMobileTab('learn'); if(!quizMode){setQuizMode(true);startQuiz();} }} className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${quizMode?'text-amber-400':'text-stone-500'}`}>
+              <I.Trophy className="w-5 h-5"/>
+              <span className="text-[10px] font-black tracking-wider">Quiz</span>
+            </button>
+          </div>
+        </div>
+      );
+    };
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

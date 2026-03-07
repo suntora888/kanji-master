@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="40" fill="#0D0B09"/>
+  <rect x="16" y="16" width="160" height="160" rx="28" fill="#1C1917"/>
+  <text x="96" y="120" text-anchor="middle" font-family="serif" font-size="88" fill="#D4AF37">漢</text>
+  <text x="96" y="170" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="bold" fill="#F97316" letter-spacing="1">MASTER</text>
+</svg>
